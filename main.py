@@ -9,6 +9,6 @@ api_secret = os.environ['BINANCE_API_SECRET']
 client = Client(api_key, api_secret)
 bm = BinanceSocketManager(client)
 tr = Trader()
-conn_key = bm.start_kline_socket('BTCUSDT', tr.monitor, interval=Client.KLINE_INTERVAL_1MINUTE)
+conn_key = bm.start_kline_socket('ETHUSDT', tr.monitor, interval=Client.KLINE_INTERVAL_1MINUTE)
 
 bm.start()
