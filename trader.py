@@ -94,7 +94,7 @@ class Trader:
             macd1 = self.data[-2]['macd']
             macd2 = self.data[-3]['macd']
             if not (macd1 is None or macd2 is None):
-                return macd2 >= macd1
+                return macd2 > macd1
             else:
                 return False
         else:
