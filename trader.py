@@ -3,7 +3,7 @@ from functools import reduce
 
 class Trader:
 
-    def __init__(self):
+    def __init__(self, klines):
         self.data = []
         self.precesion = 2
         self.orderSize = 100
@@ -11,6 +11,14 @@ class Trader:
         self.balance = 1000
         self.ts = 0
         self.orders = []
+
+        if not klines is None:
+            for k in klines:
+                rec = defaultdict(lambda:None)
+                rec['ts'] = k[0]
+                rec['close'] = float(k[4])
+                self.data.append(rec)
+                self.indicators()
 
     def monitor(self, msg):
         if msg['e'] == 'kline':
@@ -22,14 +30,14 @@ class Trader:
                 self.data[-1] = rec
             else:
                 self.data.append(rec)
+                if len(self.data) > 1 and self.data[-2]['ts'] != self.data[-1]['ts']:
+                    print(
+                        "Price: %4.2f, current balance: %5.2f, ema(7): %s, ema(25): %s, macd: %s, macdh: %s" % 
+                        (self.data[-2]['close'], self.balance, self.data[-2]['ema7'], self.data[-2]['ema25'], self.data[-2]['macd'], self.data[-2]['macdh']))
 
             if len(self.data) > 60: self.data.pop(0)
 
-            self.ema(7,'close','ema7')
-            self.ema(12,'close','ema12')
-            self.ema(25,'close','ema25')
-            self.ema(26,'close','ema26')
-            self.macd()
+            self.indicators()
 
             if self.status == 1 and self.data[-1]['ts'] != self.ts and self.buySignal():
                 self.buy() 
@@ -40,7 +48,12 @@ class Trader:
                 self.status = 1
 
 
-            print("Price: %4.2f, current balance: %5.2f, macd: %s, macdh: %s" % (self.data[-1]['close'], self.balance, self.data[-1]['macd'], self.data[-1]['macdh']))
+    def indicators(self):
+        self.ema(7,'close','ema7')
+        self.ema(12,'close','ema12')
+        self.ema(25,'close','ema25')
+        self.ema(26,'close','ema26')
+        self.macd()
 
     def buy(self):
         self.ts = self.data[-1]['ts']
