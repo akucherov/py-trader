@@ -1,16 +1,24 @@
 from collections import defaultdict
-from functools import reduce 
+from functools import reduce
+from math import floor 
 
 class Trader:
 
-    def __init__(self, klines):
+    def __init__(self, symbol, quoteP, assetP, step, precision, klines=None):
+        print(symbol, quoteP, assetP, step, precision)
+
         self.data = []
-        self.precesion = 2
+        self.symbol = symbol
+        self.quoteP = quoteP
+        self.assetP = assetP
+        self.precision = precision
+        self.step = step
         self.orderSize = 100
         self.status = 1
         self.balance = 1000
         self.ts = 0
         self.orders = []
+        self.orderLifeTime = 0
 
         if not klines is None:
             for k in klines:
@@ -30,6 +38,7 @@ class Trader:
                 self.data[-1] = rec
             else:
                 self.data.append(rec)
+                if self.status == 2: self.orderLifeTime += 1
                 if len(self.data) > 1 and self.data[-2]['ts'] != self.data[-1]['ts']:
                     print(
                         "Price: %4.2f, current balance: %5.2f, ema(7): %s, ema(25): %s, macd: %s, macdh: %s" % 
@@ -72,7 +81,8 @@ class Trader:
         self.orders[-1]['sellPrice'] = self.data[-1]['close']
         self.orders[-1]['sellResult'] = self.orders[-1]['buyVolume'] * self.data[-1]['close']
         self.orders[-1]['profit'] = self.orders[-1]['sellResult'] - self.orderSize
-        self.balance = round(self.balance + self.orders[-1]['sellResult'], self.precesion)
+        self.balance = round(self.balance + self.orders[-1]['sellResult'], self.quoteP)
+        self.orderLifeTime = 0
 
         print("Sell order: %4.2f, profit: %4.2f" % (self.orders[-1]['sellPrice'], self.orders[-1]['profit']))
 
@@ -94,25 +104,28 @@ class Trader:
             macd1 = self.data[-2]['macd']
             macd2 = self.data[-3]['macd']
             if not (macd1 is None or macd2 is None):
-                return macd2 > macd1
+                return (self.orderLifeTime < 9 and macd2 > macd1) or (self.orderLifeTime >= 9 and macd2 >= macd1)
             else:
                 return False
         else:
             return False
 
+    def valueByQuote(self, quote, price):
+        return round(floor((quote / price) / self.step) * self.step, self.assetP)
+
     def ema(self, window, s, r):
         if len(self.data) >= window:
             if self.data[-2][r] is None:
                 if not reduce(lambda x,y: x if x is None else y, [v[s] for v in self.data[-window:]]) is None:
-                    self.data[-1][r] = round(sum([r[s] for r in self.data[-window:]]) / float(window), self.precesion)
+                    self.data[-1][r] = round(sum([r[s] for r in self.data[-window:]]) / float(window), self.precision)
             else:
                 c = 2.0 / (window + 1) 
-                self.data[-1][r] = round(c*(self.data[-1][s] - self.data[-2][r]) + self.data[-2][r], self.precesion)
+                self.data[-1][r] = round(c*(self.data[-1][s] - self.data[-2][r]) + self.data[-2][r], self.precision)
                 
     
     def macd(self):
         if not (self.data[-1]['ema12'] is None or self.data[-1]['ema26'] is None):
-            self.data[-1]['macd'] = round(self.data[-1]['ema12'] - self.data[-1]['ema26'], self.precesion)
+            self.data[-1]['macd'] = round(self.data[-1]['ema12'] - self.data[-1]['ema26'], self.precision)
             self.ema(9,'macd','macds')
             if not (self.data[-1]['macd'] is None or self.data[-1]['macds'] is None):
-                self.data[-1]['macdh'] = round(self.data[-1]['macd'] - self.data[-1]['macds'], self.precesion)
+                self.data[-1]['macdh'] = round(self.data[-1]['macd'] - self.data[-1]['macds'], self.precision)
