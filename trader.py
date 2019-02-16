@@ -1,25 +1,40 @@
+import common
+from binance.client import Client
+from binance.websockets import BinanceSocketManager
 from collections import defaultdict
 from functools import reduce
 from math import floor 
 
 class Trader:
 
-    def __init__(self, symbol, quoteP, assetP, step, precision, klines=None):
-        print(symbol, quoteP, assetP, step, precision)
+    def __init__(self, key, secret, baseQuote, asset, orderSize, interval=Client.KLINE_INTERVAL_1MINUTE):
+        self.client = Client(key, secret)
+        self.symbol = asset + baseQuote
+        self.baseQuote = baseQuote
+        self.asset = asset
+        self.orderSize = orderSize
+        self.interval = interval
 
+        # Account balance
+        acc = self.client.get_asset_balance(baseQuote)
+        self.balance = float(acc['free'])
+
+        # Get step size, precision and others
+        info = self.client.get_exchange_info()
+        r = [i for i in info["symbols"] if i["symbol"]==self.symbol]
+        self.quoteP = r[0]["quotePrecision"]
+        self.assetP = r[0]["baseAssetPrecision"]
+        self.step = float([i for i in r[0]["filters"] if i["filterType"]=="LOT_SIZE"][0]["stepSize"])
+        self.precision = common.prec(float([i for i in r[0]["filters"] if i["filterType"]=="PRICE_FILTER"][0]["minPrice"]))
+
+        # Prepare initial state
         self.data = []
-        self.symbol = symbol
-        self.quoteP = quoteP
-        self.assetP = assetP
-        self.precision = precision
-        self.step = step
-        self.orderSize = 100
         self.status = 1
-        self.balance = 1000
         self.ts = 0
         self.orders = []
         self.orderLifeTime = 0
 
+        klines = self.client.get_klines(symbol=self.symbol, interval=self.interval, limit=60)
         if not klines is None:
             for k in klines:
                 rec = defaultdict(lambda:None)
@@ -27,6 +42,11 @@ class Trader:
                 rec['close'] = float(k[4])
                 self.data.append(rec)
                 self.indicators()
+
+    def start(self):
+        self.bm = BinanceSocketManager(self.client)
+        self.conn_key = self.bm.start_kline_socket(self.symbol, self.monitor, interval=self.interval)
+        self.bm.start()
 
     def monitor(self, msg):
         if msg['e'] == 'kline':
