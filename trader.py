@@ -18,6 +18,8 @@ class Trader:
         # Account balance
         acc = self.client.get_asset_balance(baseQuote)
         self.balance = float(acc['free'])
+        acc = self.client.get_asset_balance(asset)
+        self.assetBalance = float(acc['free'])
 
         # Get step size, precision and others
         info = self.client.get_exchange_info()
@@ -34,6 +36,7 @@ class Trader:
         self.orders = []
         self.orderLifeTime = 0
 
+    def start(self):
         klines = self.client.get_klines(symbol=self.symbol, interval=self.interval, limit=60)
         if not klines is None:
             for k in klines:
@@ -43,7 +46,6 @@ class Trader:
                 self.data.append(rec)
                 self.indicators()
 
-    def start(self):
         self.bm = BinanceSocketManager(self.client)
         self.conn_key = self.bm.start_kline_socket(self.symbol, self.monitor, interval=self.interval)
         self.bm.start()
@@ -61,14 +63,14 @@ class Trader:
                 if self.status == 2: self.orderLifeTime += 1
                 if len(self.data) > 1 and self.data[-2]['ts'] != self.data[-1]['ts']:
                     print(
-                        "Price: %4.2f, current balance: %5.2f, ema(7): %s, ema(25): %s, macd: %s, macdh: %s" % 
-                        (self.data[-2]['close'], self.balance, self.data[-2]['ema7'], self.data[-2]['ema25'], self.data[-2]['macd'], self.data[-2]['macdh']))
+                        "Price: %s, %s balance: %.8f, %s balance: %.8f, ema(7): %s, ema(25): %s, macd: %s, macdh: %s" % 
+                        (self.data[-2]['close'], self.baseQuote, self.balance, self.asset, self.assetBalance, self.data[-2]['ema7'], self.data[-2]['ema25'], self.data[-2]['macd'], self.data[-2]['macdh']))
 
             if len(self.data) > 60: self.data.pop(0)
 
             self.indicators()
 
-            if self.status == 1 and self.data[-1]['ts'] != self.ts and self.buySignal():
+            if self.status == 1 and self.data[-1]['ts'] != self.ts and self.balance > self.orderSize and self.buySignal():
                 self.buy() 
                 self.status = 2
 
@@ -88,32 +90,53 @@ class Trader:
         self.ts = self.data[-1]['ts']
         order = defaultdict(lambda:None)
         order['buy'] = self.ts
-        order['buyPrice'] = self.data[-1]['close']
-        order['buyVolume'] = self.orderSize / order['buyPrice']
-        self.balance -= self.orderSize
-        self.orders.append(order)
+        asset = self.valueByQuote(self.orderSize, self.data[-1]['close'])
 
-        print("Buy order: %4.2f" % (order['buyPrice']))
+        trx = self.client.order_market_buy(symbol=self.symbol, quantity=asset, newOrderRespType='FULL')
+
+        if trx['status'] == 'FILLED':
+            quote = float(trx['cummulativeQuoteQty'])
+            qty = float(trx['executedQty'])
+            commision = round(sum([float(f['commission']) for f in trx['fills']]), self.assetP)
+            order['buyPrice'] = round(quote/qty, self.precision)
+            order['buyVolume'] = round(qty - commision, self.assetP)
+            order['buyOrderSize'] = quote
+            self.balance = round(self.balance - quote, self.quoteP)
+            self.assetBalance = round(self.assetBalance + order['buyVolume'], self.assetP)
+            self.orders.append(order)
+            print("Buy order: %s, order size: %s" % (order['buyPrice'], order['buyOrderSize']))
+        else:
+            raise RuntimeError("Market buy order returned unexpected response.")
 
     def sell(self):
         self.ts = self.data[-1]['ts']
         self.orders[-1]['sell'] = self.ts
-        self.orders[-1]['sellPrice'] = self.data[-1]['close']
-        self.orders[-1]['sellResult'] = self.orders[-1]['buyVolume'] * self.data[-1]['close']
-        self.orders[-1]['profit'] = self.orders[-1]['sellResult'] - self.orderSize
-        self.balance = round(self.balance + self.orders[-1]['sellResult'], self.quoteP)
-        self.orderLifeTime = 0
+        asset = round(floor(self.assetBalance / self.step) * self.step, self.assetP)
 
-        print("Sell order: %4.2f, profit: %4.2f" % (self.orders[-1]['sellPrice'], self.orders[-1]['profit']))
+        trx = self.client.order_market_sell(symbol=self.symbol, quantity=asset, newOrderRespType='FULL')
+
+        if trx['status'] == 'FILLED':
+            quote = float(trx['cummulativeQuoteQty'])
+            qty = float(trx['executedQty'])
+            commision = round(sum([float(f['commission']) for f in trx['fills']]), self.quoteP)
+            self.orders[-1]['sellPrice'] = round(quote/qty, self.precision)
+            self.orders[-1]['sellResult'] = round(quote - commision, self.quoteP)
+            self.orders[-1]['profit'] = round(self.orders[-1]['sellResult'] - self.orders[-1]['buyOrderSize'], self.quoteP)
+            self.balance = round(self.balance + self.orders[-1]['sellResult'], self.quoteP) 
+            self.assetBalance = round(self.assetBalance - qty, self.assetP)
+            self.orderLifeTime = 0
+            print("Sell order: %s, profit: %s" % (self.orders[-1]['sellPrice'], self.orders[-1]['profit']))
+        else:
+            raise RuntimeError("Market sell order returned unexpected response.")
 
     def buySignal(self):
         if len(self.data) > 2:
             h1 = self.data[-2]['macdh']
             h2 = self.data[-3]['macdh']
-            ema7 = self.data[-2]['ema7']
-            ema25 = self.data[-2]['ema25']
-            if not (h1 is None or h2 is None or ema7 is None or ema25 is None):
-                return h1 >= 0 and h2 < 0 and ema7 <= ema25
+            #ema7 = self.data[-2]['ema7']
+            #ema25 = self.data[-2]['ema25']
+            if not (h1 is None or h2 is None):
+                return h1 >= 0 and h2 < 0
             else:
                 return False
         else:
@@ -124,7 +147,7 @@ class Trader:
             macd1 = self.data[-2]['macd']
             macd2 = self.data[-3]['macd']
             if not (macd1 is None or macd2 is None):
-                return (self.orderLifeTime < 9 and macd2 > macd1) or (self.orderLifeTime >= 9 and macd2 >= macd1)
+                return (self.orderLifeTime < 9 and macd2 - macd1 > 0.005) or (self.orderLifeTime >= 9 and macd2 - macd1 > 0)
             else:
                 return False
         else:
@@ -137,15 +160,15 @@ class Trader:
         if len(self.data) >= window:
             if self.data[-2][r] is None:
                 if not reduce(lambda x,y: x if x is None else y, [v[s] for v in self.data[-window:]]) is None:
-                    self.data[-1][r] = round(sum([r[s] for r in self.data[-window:]]) / float(window), self.precision)
+                    self.data[-1][r] = round(sum([r[s] for r in self.data[-window:]]) / float(window), self.precision*2)
             else:
                 c = 2.0 / (window + 1) 
-                self.data[-1][r] = round(c*(self.data[-1][s] - self.data[-2][r]) + self.data[-2][r], self.precision)
+                self.data[-1][r] = round(c*(self.data[-1][s] - self.data[-2][r]) + self.data[-2][r], self.precision*2)
                 
     
     def macd(self):
         if not (self.data[-1]['ema12'] is None or self.data[-1]['ema26'] is None):
-            self.data[-1]['macd'] = round(self.data[-1]['ema12'] - self.data[-1]['ema26'], self.precision)
+            self.data[-1]['macd'] = round(self.data[-1]['ema12'] - self.data[-1]['ema26'], self.precision*2)
             self.ema(9,'macd','macds')
             if not (self.data[-1]['macd'] is None or self.data[-1]['macds'] is None):
-                self.data[-1]['macdh'] = round(self.data[-1]['macd'] - self.data[-1]['macds'], self.precision)
+                self.data[-1]['macdh'] = round(self.data[-1]['macd'] - self.data[-1]['macds'], self.precision*2)
