@@ -7,7 +7,7 @@ from math import floor
 
 class Trader:
 
-    def __init__(self, key, secret, baseQuote, asset, orderSize, interval=Client.KLINE_INTERVAL_1MINUTE):
+    def __init__(self, key, secret, baseQuote, asset, orderSize, interval=Client.KLINE_INTERVAL_30MINUTE):
         self.client = Client(key, secret)
         self.symbol = asset + baseQuote
         self.baseQuote = baseQuote
@@ -50,6 +50,15 @@ class Trader:
         self.conn_key = self.bm.start_kline_socket(self.symbol, self.monitor, interval=self.interval)
         self.bm.start()
 
+        if len(self.data) > 1:
+            self.print()
+
+    def print(self):
+        print(
+            "Price: %s, %s balance: %.8f, %s balance: %.8f, ema(7): %s, ema(25): %s, macd: %s, macdh: %s" % 
+            (self.data[-2]['close'], self.baseQuote, self.balance, self.asset, self.assetBalance, self.data[-2]['ema7'], self.data[-2]['ema25'], self.data[-2]['macd'], self.data[-2]['macdh']))
+
+
     def monitor(self, msg):
         if msg['e'] == 'kline':
             k = msg['k']
@@ -61,11 +70,8 @@ class Trader:
             else:
                 self.data.append(rec)
                 if self.status == 2: self.orderLifeTime += 1
-                if len(self.data) > 1 and self.data[-2]['ts'] != self.data[-1]['ts']:
-                    print(
-                        "Price: %s, %s balance: %.8f, %s balance: %.8f, ema(7): %s, ema(25): %s, macd: %s, macdh: %s" % 
-                        (self.data[-2]['close'], self.baseQuote, self.balance, self.asset, self.assetBalance, self.data[-2]['ema7'], self.data[-2]['ema25'], self.data[-2]['macd'], self.data[-2]['macdh']))
-
+                if len(self.data) > 1 and self.data[-2]['ts'] != self.data[-1]['ts']:   
+                    self.print()
             if len(self.data) > 60: self.data.pop(0)
 
             self.indicators()
