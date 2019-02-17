@@ -35,6 +35,7 @@ class Trader:
         self.ts = 0
         self.orders = []
         self.orderLifeTime = 0
+        self.almostBuySignal = False
 
     def start(self):
         klines = self.client.get_klines(symbol=self.symbol, interval=self.interval, limit=60)
@@ -110,6 +111,7 @@ class Trader:
             self.balance = round(self.balance - quote, self.quoteP)
             self.assetBalance = round(self.assetBalance + order['buyVolume'], self.assetP)
             self.orders.append(order)
+            self.almostBuySignal = False
             print("Buy order: %s, order size: %s" % (order['buyPrice'], order['buyOrderSize']))
         else:
             raise RuntimeError("Market buy order returned unexpected response.")
@@ -142,7 +144,8 @@ class Trader:
             #ema7 = self.data[-2]['ema7']
             #ema25 = self.data[-2]['ema25']
             if not (h1 is None or h2 is None):
-                return h1 >= 0 and h2 < 0
+                if not self.almostBuySignal: self.almostBuySignal = (h1 >= 0 and h2 < 0)
+                return self.almostBuySignal and h1 >= 0.05 and h2 < h1
             else:
                 return False
         else:
@@ -153,7 +156,7 @@ class Trader:
             macd1 = self.data[-2]['macd']
             macd2 = self.data[-3]['macd']
             if not (macd1 is None or macd2 is None):
-                return (self.orderLifeTime < 9 and macd2 - macd1 > 0.005) or (self.orderLifeTime >= 9 and macd2 - macd1 > 0)
+                return (self.orderLifeTime < 9 and macd2 - macd1 > 0.05) or (self.orderLifeTime >= 9 and macd2 - macd1 > 0)
             else:
                 return False
         else:
