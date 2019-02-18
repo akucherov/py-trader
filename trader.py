@@ -21,7 +21,7 @@ class Trader:
         f = open(assets, "r")
         for line in f:
             p = line.split()
-            symbol = baseQuote + p[0]
+            symbol =  p[0] + baseQuote
             key = symbol + p[2]
             rec = defaultdict(lambda:None)
             rec['symbol'] = symbol
@@ -55,146 +55,173 @@ class Trader:
         f.close()
 
     def start(self):
-        klines = self.client.get_klines(symbol=self.symbol, interval=self.interval, limit=60)
-        if not klines is None:
-            for k in klines:
-                rec = defaultdict(lambda:None)
-                rec['ts'] = k[0]
-                rec['close'] = float(k[4])
-                self.data.append(rec)
-                self.indicators()
-
         self.bm = BinanceSocketManager(self.client)
-        self.conn_key = self.bm.start_kline_socket(self.symbol, self.monitor, interval=self.interval)
+        for _, asset in self.assets.items():
+            klines = self.client.get_klines(symbol=asset['symbol'], interval=asset['interval'], limit=60)
+            if not klines is None:
+                for k in klines:
+                    rec = defaultdict(lambda:None)
+                    rec['ts'] = k[0]
+                    rec['close'] = float(k[4])
+                    asset['data'].append(rec)
+                    self.indicators(asset)
+            asset['conn_key'] = self.bm.start_kline_socket(asset['symbol'], self.monitor, interval=asset['interval'])
+            if len(asset['data']) > 1: self.print(asset)
+
         self.bm.start()
 
-        if len(self.data) > 1:
-            self.print()
-
-    def print(self):
+    def print(self, asset):
         print(
-            "Price: %s, %s balance: %.8f, %s balance: %.8f, ema(7): %s, ema(25): %s, macd: %s, macdh: %s" % 
-            (self.data[-2]['close'], self.baseQuote, self.balance, self.asset, self.assetBalance, self.data[-2]['ema7'], self.data[-2]['ema25'], self.data[-2]['macd'], self.data[-2]['macdh']))
-
+            "%s %s: price: %s, %s balance: %.8f, %s balance: %.8f, ema(7): %s, ema(25): %s, macd: %s, macdh: %s" % 
+            (asset['symbol'], 
+             asset['interval'], 
+             asset['data'][-2]['close'], 
+             self.baseQuote, 
+             self.quoteBalance, 
+             asset['asset'], 
+             asset['balance'], 
+             asset['data'][-2]['ema7'], 
+             asset['data'][-2]['ema25'], 
+             asset['data'][-2]['macd'], 
+             asset['data'][-2]['macdh']))
 
     def monitor(self, msg):
         if msg['e'] == 'kline':
             k = msg['k']
+            asset = self.assets[k['s'] + k['i']]
+            data = asset['data']
             rec = defaultdict(lambda:None)
             rec['ts'] = k['t']
             rec['close'] = float(k['c'])
-            if len(self.data) and self.data[-1]['ts'] == rec['ts']:
-                self.data[-1] = rec
+            if len(data) and data[-1]['ts'] == rec['ts']:
+                data[-1] = rec
             else:
-                self.data.append(rec)
-                if self.status == 2: self.orderLifeTime += 1
-                if len(self.data) > 1 and self.data[-2]['ts'] != self.data[-1]['ts']:   
-                    self.print()
-            if len(self.data) > 60: self.data.pop(0)
+                data.append(rec)
+                if asset['status'] == 2: asset['orderLifeTime'] += 1
+                if len(data) > 1 and data[-2]['ts'] != data[-1]['ts']:   
+                    self.print(asset)
+            if len(data) > 60: data.pop(0)
 
-            self.indicators()
+            self.indicators(asset)
 
-            if self.status == 1 and self.data[-1]['ts'] != self.ts and self.balance > self.orderSize and self.buySignal():
-                self.buy() 
-                self.status = 2
+            if asset['status'] == 1 and data[-1]['ts'] != asset['ts'] and self.quoteBalance > asset['orderSize'] and self.buySignal(asset):
+                self.buy(asset) 
+                asset['status'] = 2
 
-            if self.status == 2 and self.data[-1]['ts'] != self.ts and self.sellSignal():
-                self.sell()
-                self.status = 1
+            if asset['status'] == 2 and data[-1]['ts'] != asset['ts'] and self.sellSignal(asset):
+                self.sell(asset)
+                asset['status'] = 1
 
 
-    def indicators(self):
-        self.ema(7,'close','ema7')
-        self.ema(12,'close','ema12')
-        self.ema(25,'close','ema25')
-        self.ema(26,'close','ema26')
-        self.macd()
+    def indicators(self, asset):
+        self.ema(asset, 7,'close','ema7')
+        self.ema(asset, 12,'close','ema12')
+        self.ema(asset, 25,'close','ema25')
+        self.ema(asset, 26,'close','ema26')
+        self.macd(asset)
 
-    def buy(self):
-        self.ts = self.data[-1]['ts']
+    def buy(self, asset):
+        asset['ts'] = asset['data'][-1]['ts']
         order = defaultdict(lambda:None)
-        order['buy'] = self.ts
-        asset = self.valueByQuote(self.orderSize, self.data[-1]['close'])
+        step = asset['step']
+        quoteP = asset['quoteP']
+        assetP = asset['assetP']
+        order['buy'] = asset['ts']
+        value = round(floor((asset['orderSize'] / asset['data'][-1]['close']) / step) * step, assetP)
 
-        trx = self.client.order_market_buy(symbol=self.symbol, quantity=asset, newOrderRespType='FULL')
+
+        trx = self.client.order_market_buy(symbol=asset['symbol'], quantity=value, newOrderRespType='FULL')
 
         if trx['status'] == 'FILLED':
             quote = float(trx['cummulativeQuoteQty'])
             qty = float(trx['executedQty'])
-            commision = round(sum([float(f['commission']) for f in trx['fills']]), self.assetP)
-            order['buyPrice'] = round(quote/qty, self.precision)
-            order['buyVolume'] = round(qty - commision, self.assetP)
+            commision = round(sum([float(f['commission']) for f in trx['fills']]), assetP)
+            order['buyPrice'] = round(quote/qty, asset['precision'])
+            order['buyVolume'] = round(qty - commision, assetP)
             order['buyOrderSize'] = quote
-            self.balance = round(self.balance - quote, self.quoteP)
-            self.assetBalance = round(self.assetBalance + order['buyVolume'], self.assetP)
-            self.orders.append(order)
-            self.almostBuySignal = False
+            self.quoteBalance = round(self.quoteBalance - quote, quoteP)
+            asset['balance'] = round(asset['balance'] + order['buyVolume'], assetP)
+            asset['orders'].append(order)
+            asset['almostBuySignal'] = False
             print("Buy order: %s, order size: %s" % (order['buyPrice'], order['buyOrderSize']))
         else:
             raise RuntimeError("Market buy order returned unexpected response.")
 
-    def sell(self):
-        self.ts = self.data[-1]['ts']
-        self.orders[-1]['sell'] = self.ts
-        asset = round(floor(self.assetBalance / self.step) * self.step, self.assetP)
+    def sell(self, asset):
+        asset['ts'] = asset['data'][-1]['ts']
+        orders = asset['orders']
+        quoteP = asset['quoteP']
+        assetP = asset['assetP']
+        balance = asset['balance']
+        step = asset['step']
+        precision = asset['precision']
+        orders[-1]['sell'] = asset['ts']
+        value = round(floor(balance / step) * step, assetP)
 
-        trx = self.client.order_market_sell(symbol=self.symbol, quantity=asset, newOrderRespType='FULL')
+        trx = self.client.order_market_sell(symbol=asset['symbol'], quantity=value, newOrderRespType='FULL')
 
         if trx['status'] == 'FILLED':
             quote = float(trx['cummulativeQuoteQty'])
             qty = float(trx['executedQty'])
-            commision = round(sum([float(f['commission']) for f in trx['fills']]), self.quoteP)
-            self.orders[-1]['sellPrice'] = round(quote/qty, self.precision)
-            self.orders[-1]['sellResult'] = round(quote - commision, self.quoteP)
-            self.orders[-1]['profit'] = round(self.orders[-1]['sellResult'] - self.orders[-1]['buyOrderSize'], self.quoteP)
-            self.balance = round(self.balance + self.orders[-1]['sellResult'], self.quoteP) 
-            self.assetBalance = round(self.assetBalance - qty, self.assetP)
-            self.orderLifeTime = 0
-            print("Sell order: %s, profit: %s" % (self.orders[-1]['sellPrice'], self.orders[-1]['profit']))
+            commision = round(sum([float(f['commission']) for f in trx['fills']]), quoteP)
+            orders[-1]['sellPrice'] = round(quote/qty, precision)
+            orders[-1]['sellResult'] = round(quote - commision, quoteP)
+            orders[-1]['profit'] = round(orders[-1]['sellResult'] - orders[-1]['buyOrderSize'], quoteP)
+            self.quoteBalance = round(self.quoteBalance + orders[-1]['sellResult'], quoteP) 
+            asset['balance'] = round(balance - qty, assetP)
+            asset['orderLifeTime'] = 0
+            print("Sell order: %s, profit: %s" % (orders[-1]['sellPrice'], orders[-1]['profit']))
         else:
             raise RuntimeError("Market sell order returned unexpected response.")
 
-    def buySignal(self):
-        if len(self.data) > 2:
-            h1 = self.data[-2]['macdh']
-            h2 = self.data[-3]['macdh']
-            #ema7 = self.data[-2]['ema7']
-            #ema25 = self.data[-2]['ema25']
+    def buySignal(self, asset):
+        data = asset['data']
+        if len(data) > 2:
+            h1 = data[-2]['macdh']
+            h2 = data[-3]['macdh']
+            #ema7 = data[-2]['ema7']
+            #ema25 = data[-2]['ema25']
             if not (h1 is None or h2 is None):
-                if not self.almostBuySignal: self.almostBuySignal = (h1 >= 0 and h2 < 0)
-                return self.almostBuySignal and h1 >= self.BUYSIGNALSTEP and h2 < h1
+                if not asset['almostBuySignal']: asset['almostBuySignal'] = (h1 >= 0 and h2 < 0)
+                return asset['almostBuySignal'] and h1 >= asset['buySignalStep'] and h2 < h1
             else:
                 return False
         else:
             return False
 
-    def sellSignal(self):
-        if len(self.data) > 2:
-            macd1 = self.data[-2]['macd']
-            macd2 = self.data[-3]['macd']
+    def sellSignal(self, asset):
+        data = asset['data']
+        if len(data) > 2:
+            macd1 = data[-2]['macd']
+            macd2 = data[-3]['macd']
             if not (macd1 is None or macd2 is None):
-                return (self.orderLifeTime < self.SELLSIGNALINITPERIOD and macd2 - macd1 > self.SELLSIGNALINITSTEP) or (self.orderLifeTime >= self.SELLSIGNALINITPERIOD and macd2 - macd1 > self.SELLSIGNALSTEP)
+                t = asset['orderLifeTime']
+                p = asset['SellSignalInitPeriod']
+                s0 = asset['SellSignalInitStep']
+                s1 = asset['SellSignalStep']
+                return (t < p and macd2 - macd1 > s0) or (t >= p and macd2 - macd1 > s1)
             else:
                 return False
         else:
             return False
 
-    def valueByQuote(self, quote, price):
-        return round(floor((quote / price) / self.step) * self.step, self.assetP)
-
-    def ema(self, window, s, r):
-        if len(self.data) >= window:
-            if self.data[-2][r] is None:
-                if not reduce(lambda x,y: x if x is None else y, [v[s] for v in self.data[-window:]]) is None:
-                    self.data[-1][r] = round(sum([r[s] for r in self.data[-window:]]) / float(window), self.precision*2)
+    def ema(self, asset, window, s, r):
+        data = asset['data']
+        p = asset['precision'] * 2
+        if len(data) >= window:
+            if data[-2][r] is None:
+                if not reduce(lambda x,y: x if x is None else y, [v[s] for v in data[-window:]]) is None:
+                    data[-1][r] = round(sum([r[s] for r in data[-window:]]) / float(window), p)
             else:
                 c = 2.0 / (window + 1) 
-                self.data[-1][r] = round(c*(self.data[-1][s] - self.data[-2][r]) + self.data[-2][r], self.precision*2)
+                data[-1][r] = round(c*(data[-1][s] - data[-2][r]) + data[-2][r], p)
                 
     
-    def macd(self):
-        if not (self.data[-1]['ema12'] is None or self.data[-1]['ema26'] is None):
-            self.data[-1]['macd'] = round(self.data[-1]['ema12'] - self.data[-1]['ema26'], self.precision*2)
-            self.ema(9,'macd','macds')
-            if not (self.data[-1]['macd'] is None or self.data[-1]['macds'] is None):
-                self.data[-1]['macdh'] = round(self.data[-1]['macd'] - self.data[-1]['macds'], self.precision*2)
+    def macd(self, asset):
+        data = asset['data']
+        p = asset['precision'] * 2
+        if not (data[-1]['ema12'] is None or data[-1]['ema26'] is None):
+            data[-1]['macd'] = round(data[-1]['ema12'] - data[-1]['ema26'], p)
+            self.ema(asset, 9,'macd','macds')
+            if not (data[-1]['macd'] is None or data[-1]['macds'] is None):
+                data[-1]['macdh'] = round(data[-1]['macd'] - data[-1]['macds'], p)
