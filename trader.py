@@ -7,7 +7,13 @@ from math import floor
 
 class Trader:
 
-    def __init__(self, key, secret, baseQuote, asset, orderSize, interval=Client.KLINE_INTERVAL_30MINUTE):
+    def __init__(self, key, secret, baseQuote, asset, orderSize, 
+                    interval=Client.KLINE_INTERVAL_30MINUTE,
+                    buySignalStep=0.05,
+                    sellSignalInitPeriod=9,
+                    sellSignalInitStep=0.05,
+                    sellSignalStep=0):
+
         self.client = Client(key, secret)
         self.symbol = asset + baseQuote
         self.baseQuote = baseQuote
@@ -36,6 +42,12 @@ class Trader:
         self.orders = []
         self.orderLifeTime = 0
         self.almostBuySignal = False
+
+        # Signals constants
+        self.BUYSIGNALSTEP = buySignalStep
+        self.SELLSIGNALINITPERIOD = sellSignalInitPeriod
+        self.SELLSIGNALINITSTEP = sellSignalInitStep
+        self.SELLSIGNALSTEP = sellSignalStep
 
     def start(self):
         klines = self.client.get_klines(symbol=self.symbol, interval=self.interval, limit=60)
@@ -145,7 +157,7 @@ class Trader:
             #ema25 = self.data[-2]['ema25']
             if not (h1 is None or h2 is None):
                 if not self.almostBuySignal: self.almostBuySignal = (h1 >= 0 and h2 < 0)
-                return self.almostBuySignal and h1 >= 0.05 and h2 < h1
+                return self.almostBuySignal and h1 >= self.BUYSIGNALSTEP and h2 < h1
             else:
                 return False
         else:
@@ -156,7 +168,7 @@ class Trader:
             macd1 = self.data[-2]['macd']
             macd2 = self.data[-3]['macd']
             if not (macd1 is None or macd2 is None):
-                return (self.orderLifeTime < 9 and macd2 - macd1 > 0.05) or (self.orderLifeTime >= 9 and macd2 - macd1 > 0)
+                return (self.orderLifeTime < self.SELLSIGNALINITPERIOD and macd2 - macd1 > self.SELLSIGNALINITSTEP) or (self.orderLifeTime >= self.SELLSIGNALINITPERIOD and macd2 - macd1 > self.SELLSIGNALSTEP)
             else:
                 return False
         else:
