@@ -7,47 +7,52 @@ from math import floor
 
 class Trader:
 
-    def __init__(self, key, secret, baseQuote, asset, orderSize, 
-                    interval=Client.KLINE_INTERVAL_30MINUTE,
-                    buySignalStep=0.05,
-                    sellSignalInitPeriod=9,
-                    sellSignalInitStep=0.05,
-                    sellSignalStep=0):
+    def __init__(self, key, secret, baseQuote, assets):
 
         self.client = Client(key, secret)
-        self.symbol = asset + baseQuote
         self.baseQuote = baseQuote
-        self.asset = asset
-        self.orderSize = orderSize
-        self.interval = interval
-
-        # Account balance
-        acc = self.client.get_asset_balance(baseQuote)
-        self.balance = float(acc['free'])
-        acc = self.client.get_asset_balance(asset)
-        self.assetBalance = float(acc['free'])
-
-        # Get step size, precision and others
         info = self.client.get_exchange_info()
-        r = [i for i in info["symbols"] if i["symbol"]==self.symbol]
-        self.quoteP = r[0]["quotePrecision"]
-        self.assetP = r[0]["baseAssetPrecision"]
-        self.step = float([i for i in r[0]["filters"] if i["filterType"]=="LOT_SIZE"][0]["stepSize"])
-        self.precision = common.prec(float([i for i in r[0]["filters"] if i["filterType"]=="PRICE_FILTER"][0]["minPrice"]))
+        acc = self.client.get_asset_balance(baseQuote)
+        self.quoteBalance = float(acc['free'])
 
-        # Prepare initial state
-        self.data = []
-        self.status = 1
-        self.ts = 0
-        self.orders = []
-        self.orderLifeTime = 0
-        self.almostBuySignal = False
+        self.assets = {}
 
-        # Signals constants
-        self.BUYSIGNALSTEP = buySignalStep
-        self.SELLSIGNALINITPERIOD = sellSignalInitPeriod
-        self.SELLSIGNALINITSTEP = sellSignalInitStep
-        self.SELLSIGNALSTEP = sellSignalStep
+        # Read config file
+        f = open(assets, "r")
+        for line in f:
+            p = line.split()
+            symbol = baseQuote + p[0]
+            key = symbol + p[2]
+            rec = defaultdict(lambda:None)
+            rec['symbol'] = symbol
+            rec['asset'] = p[0]
+            rec['orderSize'] = float(p[1])
+            rec['interval'] = p[2]
+            rec['buySignalStep'] = float(p[3])
+            rec['sellSignalInitPeriod'] = int(p[4])
+            rec['sellSignalInitStep'] = float(p[5])
+            rec['sellSignalStep'] = float(p[6])
+
+            # Asset balance
+            acc = self.client.get_asset_balance(p[0])
+            rec['balance'] = float(acc['free'])
+
+            # Get step size, precision and others
+            r = [i for i in info["symbols"] if i["symbol"]==symbol]
+            rec['quoteP'] = r[0]["quotePrecision"]
+            rec['assetP'] = r[0]["baseAssetPrecision"]
+            rec['step'] = float([i for i in r[0]["filters"] if i["filterType"]=="LOT_SIZE"][0]["stepSize"])
+            rec['precision'] = common.prec(float([i for i in r[0]["filters"] if i["filterType"]=="PRICE_FILTER"][0]["minPrice"]))
+
+            # Prepare initial state
+            rec['data'] = []
+            rec['status'] = 1
+            rec['ts'] = 0
+            rec['orders'] = []
+            rec['orderLifeTime'] = 0
+            rec['almostBuySignal'] = False
+            self.assets[key] = rec
+        f.close()
 
     def start(self):
         klines = self.client.get_klines(symbol=self.symbol, interval=self.interval, limit=60)
