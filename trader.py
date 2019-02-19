@@ -52,6 +52,7 @@ class Trader:
             rec['orderLifeTime'] = 0
             rec['almostBuySignal'] = False
             self.assets[key] = rec
+            print("%s %s: order step: %s, q pr: %s, a pr: %s, price pr: %s" % (symbol, p[2], rec['step'], rec['quoteP'], rec['assetP'], rec['precision']))
         f.close()
 
     def start(self):
