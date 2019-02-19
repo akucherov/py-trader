@@ -198,9 +198,9 @@ class Trader:
             macd2 = data[-3]['macd']
             if not (macd1 is None or macd2 is None):
                 t = asset['orderLifeTime']
-                p = asset['SellSignalInitPeriod']
-                s0 = asset['SellSignalInitStep']
-                s1 = asset['SellSignalStep']
+                p = asset['sellSignalInitPeriod']
+                s0 = asset['sellSignalInitStep']
+                s1 = asset['sellSignalStep']
                 return (t < p and macd2 - macd1 > s0) or (t >= p and macd2 - macd1 > s1)
             else:
                 return False
