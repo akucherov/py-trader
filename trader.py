@@ -63,6 +63,7 @@ class Trader:
                 for k in klines:
                     rec = defaultdict(lambda:None)
                     rec['ts'] = k[0]
+                    rec['open'] = float(k[1])
                     rec['close'] = float(k[4])
                     asset['data'].append(rec)
                     self.indicators(asset)
@@ -73,7 +74,7 @@ class Trader:
 
     def print(self, asset):
         print(
-            "%s %s: price: %s, %s balance: %.8f, %s balance: %.8f, ema(7): %s, ema(25): %s, macd: %s, macdh: %s" % 
+            "%s %s: price: %s, %s balance: %.8f, %s balance: %.8f, ema(7): %s, ema(25): %s, macd: %s, macdh: %s, rsi(6): %s, rsi(12): %s, rsi(24): %s" % 
             (asset['symbol'], 
              asset['interval'], 
              asset['data'][-2]['close'], 
@@ -84,7 +85,10 @@ class Trader:
              asset['data'][-2]['ema7'], 
              asset['data'][-2]['ema25'], 
              asset['data'][-2]['macd'], 
-             asset['data'][-2]['macdh']))
+             asset['data'][-2]['macdh'],
+             asset['data'][-2]['rsi6'],
+             asset['data'][-2]['rsi12'],
+             asset['data'][-2]['rsi24']))
 
     def monitor(self, msg):
         if msg['e'] == 'kline':
@@ -93,6 +97,7 @@ class Trader:
             data = asset['data']
             rec = defaultdict(lambda:None)
             rec['ts'] = k['t']
+            rec['open'] = float(k['o'])
             rec['close'] = float(k['c'])
             if len(data) and data[-1]['ts'] == rec['ts']:
                 data[-1] = rec
@@ -100,7 +105,7 @@ class Trader:
                 data.append(rec)
                 if asset['status'] == 2: asset['orderLifeTime'] += 1
                 if len(data) > 1 and data[-2]['ts'] != data[-1]['ts']:   
-                    self.print(asset)
+                     self.print(asset)
             if len(data) > 60: data.pop(0)
 
             self.indicators(asset)
@@ -119,6 +124,9 @@ class Trader:
         self.ema(asset, 12,'close','ema12')
         self.ema(asset, 25,'close','ema25')
         self.ema(asset, 26,'close','ema26')
+        self.rsi(asset, 6,'close','rsi6')
+        self.rsi(asset, 12,'close','rsi12')
+        self.rsi(asset, 24,'close','rsi24')
         self.macd(asset)
 
     def buy(self, asset):
@@ -228,3 +236,33 @@ class Trader:
             self.ema(asset, 9,'macd','macds')
             if not (data[-1]['macd'] is None or data[-1]['macds'] is None):
                 data[-1]['macdh'] = round(data[-1]['macd'] - data[-1]['macds'], p)
+
+    def rsi(self, asset, window, s, r):
+        data = asset['data']
+        p = asset['precision'] * 2
+        if len(data) > window:
+            k1 = 'gain' + str(window)
+            k2 = 'loss' + str(window)
+            if data[-2][k1] is None and data[-2][k2] is None:
+                c1 = [] 
+                c2 = []
+                prev = data[-window-1][s]
+                for k in data[-window:]:
+                    if k[s] >= prev: c1.append(k[s] - prev)
+                    else: c2.append(prev - k[s])
+                    prev = k[s]
+                gain = sum(c1) / window
+                loss = sum(c2) / window
+            else:
+                changes =  data[-1][s] - data[-2][s]
+                if changes >= 0:
+                    gain = round((data[-2][k1] * (window - 1) + changes) / window, p)
+                    loss = round((data[-2][k2] * (window - 1)) / window, p)
+                else:
+                    gain = round((data[-2][k1] * (window - 1)) / window, p)
+                    loss = round((data[-2][k2] * (window - 1) - changes) / window, p)
+
+            data[-1][k1] = round(gain, p)
+            data[-1][k2] = round(loss, p)
+            data[-1][r] = round(100 - (100 / (1 + gain/loss)), p)
+                
