@@ -7,10 +7,11 @@ from math import floor
 
 class Trader:
 
-    def __init__(self, key, secret, baseQuote, assets):
+    def __init__(self, key, secret, baseQuote, assets, test=True):
 
         self.client = Client(key, secret)
         self.baseQuote = baseQuote
+        self.test = test
         info = self.client.get_exchange_info()
         acc = self.client.get_asset_balance(baseQuote)
         self.quoteBalance = float(acc['free'])
@@ -138,23 +139,28 @@ class Trader:
         order['buy'] = asset['ts']
         value = round(floor((asset['orderSize'] / asset['data'][-1]['close']) / step) * step, assetP)
 
-
-        trx = self.client.order_market_buy(symbol=asset['symbol'], quantity=value, newOrderRespType='FULL')
-
-        if trx['status'] == 'FILLED':
-            quote = float(trx['cummulativeQuoteQty'])
-            qty = float(trx['executedQty'])
-            commision = round(sum([float(f['commission']) for f in trx['fills']]), assetP)
-            order['buyPrice'] = round(quote/qty, asset['precision'])
-            order['buyVolume'] = round(qty - commision, assetP)
-            order['buyOrderSize'] = quote
-            self.quoteBalance = round(self.quoteBalance - quote, quoteP)
-            asset['balance'] = round(asset['balance'] + order['buyVolume'], assetP)
-            asset['orders'].append(order)
-            asset['almostBuySignal'] = False
-            print("Buy order: %s, order size: %s" % (order['buyPrice'], order['buyOrderSize']))
+        if self.test:
+            quote = round(asset['data'][-1]['close'] * value, quoteP)
+            qty = value
+            commission = round(value / 1000, assetP)
         else:
-            raise RuntimeError("Market buy order returned unexpected response.")
+            trx = self.client.order_market_buy(symbol=asset['symbol'], quantity=value, newOrderRespType='FULL')
+
+            if trx['status'] == 'FILLED':
+                quote = float(trx['cummulativeQuoteQty'])
+                qty = float(trx['executedQty'])
+                commission = round(sum([float(f['commission']) for f in trx['fills']]), assetP)
+            else:
+                raise RuntimeError("Market buy order returned unexpected response.")
+
+        order['buyPrice'] = round(quote/qty, asset['precision'])
+        order['buyVolume'] = round(qty - commission, assetP)
+        order['buyOrderSize'] = quote
+        self.quoteBalance = round(self.quoteBalance - quote, quoteP)
+        asset['balance'] = round(asset['balance'] + order['buyVolume'], assetP)
+        asset['orders'].append(order)
+        asset['almostBuySignal'] = False
+        print("Buy order: %s, order size: %s" % (order['buyPrice'], order['buyOrderSize']))
 
     def sell(self, asset):
         asset['ts'] = asset['data'][-1]['ts']
@@ -167,21 +173,27 @@ class Trader:
         orders[-1]['sell'] = asset['ts']
         value = round(floor(balance / step) * step, assetP)
 
-        trx = self.client.order_market_sell(symbol=asset['symbol'], quantity=value, newOrderRespType='FULL')
-
-        if trx['status'] == 'FILLED':
-            quote = float(trx['cummulativeQuoteQty'])
-            qty = float(trx['executedQty'])
-            commision = round(sum([float(f['commission']) for f in trx['fills']]), quoteP)
-            orders[-1]['sellPrice'] = round(quote/qty, precision)
-            orders[-1]['sellResult'] = round(quote - commision, quoteP)
-            orders[-1]['profit'] = round(orders[-1]['sellResult'] - orders[-1]['buyOrderSize'], quoteP)
-            self.quoteBalance = round(self.quoteBalance + orders[-1]['sellResult'], quoteP) 
-            asset['balance'] = round(balance - qty, assetP)
-            asset['orderLifeTime'] = 0
-            print("Sell order: %s, profit: %s" % (orders[-1]['sellPrice'], orders[-1]['profit']))
+        if self.test:
+            quote = round(asset['data'][-1]['close'] * value, quoteP)
+            qty = value
+            commission = round(quote / 1000, quoteP)
         else:
-            raise RuntimeError("Market sell order returned unexpected response.")
+            trx = self.client.order_market_sell(symbol=asset['symbol'], quantity=value, newOrderRespType='FULL')
+
+            if trx['status'] == 'FILLED':
+                quote = float(trx['cummulativeQuoteQty'])
+                qty = float(trx['executedQty'])
+                commission = round(sum([float(f['commission']) for f in trx['fills']]), quoteP)           
+            else:
+                raise RuntimeError("Market sell order returned unexpected response.")
+
+        orders[-1]['sellPrice'] = round(quote/qty, precision)
+        orders[-1]['sellResult'] = round(quote - commission, quoteP)
+        orders[-1]['profit'] = round(orders[-1]['sellResult'] - orders[-1]['buyOrderSize'], quoteP)
+        self.quoteBalance = round(self.quoteBalance + orders[-1]['sellResult'], quoteP) 
+        asset['balance'] = round(balance - qty, assetP)
+        asset['orderLifeTime'] = 0
+        print("Sell order: %s, profit: %s" % (orders[-1]['sellPrice'], orders[-1]['profit']))
 
     def buySignal(self, asset):
         data = asset['data']
