@@ -3,7 +3,11 @@ from binance.client import Client
 from binance.websockets import BinanceSocketManager
 from collections import defaultdict
 from functools import reduce
-from math import floor 
+from math import floor
+from dateparser import parse
+from datetime import datetime
+
+Sec = {'1m':60,'3m':180,'5m':300,'15m':900,'30m':1800,'1h':3600,'2h':7200,'4h':14400,'6h':21600,'8h':28800,'12h':43200,'1d':86400}
 
 class Trader:
 
@@ -47,6 +51,7 @@ class Trader:
 
             # Prepare initial state
             rec['data'] = []
+            rec['history'] = []
             rec['status'] = 1
             rec['ts'] = 0
             rec['orders'] = []
@@ -73,6 +78,46 @@ class Trader:
 
         self.bm.start()
 
+    def demo(self, start):
+        start_ts = datetime.timestamp(parse(start))
+        quoteBalance = self.quoteBalance
+        print("%s initial balance %s" % (self.baseQuote, quoteBalance))
+
+        ts = None
+        for _, asset in self.assets.items():
+            i = Sec[asset['interval']]
+            sts = floor(start_ts / i) * i * 1000
+            ts = sts if ts is None else min(ts, sts)
+            symbol = asset['symbol']
+            interval = asset['interval']
+            klines = self.client.get_historical_klines(symbol, interval, sts)
+            for k in klines:
+                msg = {'e':'kline', 'k':{'t':k[0], 's': symbol, 'i': interval, 'o':k[1], 'c':k[4]}}
+                asset['history'].append(msg)
+                asset['demo_index'] = 0
+            print("%s %s: %s records, initial balance: %s" % (asset['symbol'], asset['interval'], len(klines), asset['balance']))
+        
+        while True:
+            next_ts = None
+            for _, asset in self.assets.items():
+                i = asset['demo_index']
+                history = asset['history']
+                if i < len(history):
+                    msg = history[i]
+                    t = msg['k']['t']
+                    if (t == ts):
+                        self.monitor(msg, False)
+                        asset['demo_index'] = i+1
+                        if i+1 < len(history): t = history[i+1]['k']['t']
+                    next_ts = t if next_ts is None else min(next_ts, t)
+            if next_ts is None: break
+            ts = next_ts
+
+        print("-----------------------------------")
+        print("%s result balance %s" % (self.baseQuote, self.quoteBalance))
+        for _, asset in self.assets.items():
+            print("%s %s: result balance: %s" % (asset['symbol'], asset['interval'], asset['balance']))
+
     def print(self, asset):
         print(
             "%s %s: price: %s, %s balance: %.8f, %s balance: %.8f, ema(7): %s, ema(25): %s, macd: %s, macdh: %s, rsi(6): %s, rsi(12): %s, rsi(24): %s" % 
@@ -91,7 +136,7 @@ class Trader:
              asset['data'][-2]['rsi12'],
              asset['data'][-2]['rsi24']))
 
-    def monitor(self, msg):
+    def monitor(self, msg, log=True):
         if msg['e'] == 'kline':
             k = msg['k']
             asset = self.assets[k['s'] + k['i']]
@@ -105,7 +150,7 @@ class Trader:
             else:
                 data.append(rec)
                 if asset['status'] == 2: asset['orderLifeTime'] += 1
-                if len(data) > 1 and data[-2]['ts'] != data[-1]['ts']:   
+                if log and len(data) > 1 and data[-2]['ts'] != data[-1]['ts']:   
                      self.print(asset)
             if len(data) > 60: data.pop(0)
 

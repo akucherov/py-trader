@@ -9,4 +9,5 @@ quote = sys.argv[1] if len(sys.argv) > 1 else "USDT"
 assetsConfig = sys.argv[2] if len(sys.argv) > 2 else "assets.txt"
 live = sys.argv[3] == 'live' if len(sys.argv) > 3 else False
 
-Trader(api_key, api_secret, quote, assetsConfig, not live).start()
+if live: Trader(api_key, api_secret, quote, assetsConfig, False).start()
+else: Trader(api_key, api_secret, quote, assetsConfig, True).demo('1 week ago')
