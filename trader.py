@@ -200,13 +200,14 @@ class Trader:
         if len(data) > 2:
             h1 = data[-2]['macdh']
             h2 = data[-3]['macdh']
-            macd1 = data[-2]['macd']
-            macd2 = data[-3]['macd']
+            #macd1 = data[-2]['macd']
+            #macd2 = data[-3]['macd']
+            r1 = data[-2]['rsi6']
+            r2 = data[-3]['rsi6']
             a = asset['almostBuySignal']
-            if not (h1 is None or h2 is None):
-                if not a and (h1 >= 0 and h2 < 0): asset['almostBuySignal'] = True
-                if a and (h1 < 0 and h2 >= 0): asset['almostBuySignal'] = False
-                return a and (macd1 - macd2 > asset['buySignalStep'])
+            if not (h1 is None or h2 is None or r1 is None or r2 is None):
+                if not a and h1 < 0 and r2 <= 30 and r1 <= 30: asset['almostBuySignal'] = True
+                return a and r2 < r1 
             else:
                 return False
         else:
