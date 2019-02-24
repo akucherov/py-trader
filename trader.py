@@ -33,10 +33,7 @@ class Trader:
             rec['asset'] = p[0]
             rec['orderSize'] = float(p[1])
             rec['interval'] = p[2]
-            rec['buySignalStep'] = float(p[3])
-            rec['sellSignalInitPeriod'] = int(p[4])
-            rec['sellSignalInitStep'] = float(p[5])
-            rec['sellSignalStep'] = float(p[6])
+            rec['params'] = [float(param) for param in p[3:]]
 
             # Asset balance
             acc = self.client.get_asset_balance(p[0])
@@ -55,8 +52,6 @@ class Trader:
             rec['status'] = 1
             rec['ts'] = 0
             rec['orders'] = []
-            rec['orderLifeTime'] = 0
-            rec['almostBuySignal'] = False
             self.assets[key] = rec
             print("%s %s: order step: %s, q pr: %s, a pr: %s, price pr: %s" % (symbol, p[2], rec['step'], rec['quoteP'], rec['assetP'], rec['precision']))
         f.close()
@@ -78,11 +73,8 @@ class Trader:
 
         self.bm.start()
 
-    def demo(self, start):
+    def prepareHistory(self, start, log=True):
         start_ts = datetime.timestamp(parse(start))
-        quoteBalance = self.quoteBalance
-        print("%s initial balance %s" % (self.baseQuote, quoteBalance))
-
         ts = None
         for _, asset in self.assets.items():
             i = Sec[asset['interval']]
@@ -95,8 +87,12 @@ class Trader:
                 msg = {'e':'kline', 'k':{'t':k[0], 's': symbol, 'i': interval, 'o':k[1], 'c':k[4]}}
                 asset['history'].append(msg)
                 asset['demo_index'] = 0
-            print("%s %s: %s records, initial balance: %s" % (asset['symbol'], asset['interval'], len(klines), asset['balance']))
-        
+            if log:
+                print("%s %s: %s records, initial balance: %s" % (asset['symbol'], asset['interval'], len(klines), asset['balance']))
+        return ts
+                    
+    def testTrades(self, start_ts):
+        ts = start_ts
         while True:
             next_ts = None
             for _, asset in self.assets.items():
@@ -113,10 +109,47 @@ class Trader:
             if next_ts is None: break
             ts = next_ts
 
+    def demo(self, start):
+        quoteBalance = self.quoteBalance
+        print("%s initial balance %s" % (self.baseQuote, quoteBalance))
+
+        ts = self.prepareHistory(start)
+        self.testTrades(ts)
+        
         print("-----------------------------------")
         print("%s result balance %s" % (self.baseQuote, self.quoteBalance))
         for _, asset in self.assets.items():
             print("%s %s: result balance: %s" % (asset['symbol'], asset['interval'], asset['balance']))
+
+    def tune(self, start, size, min, max, step):
+        ts = self.prepareHistory(start)
+        balance = self.quoteBalance
+        maxProfit = 0
+        bestParams = None
+
+        for params in common.genParams(size, min, max, step):
+            self.quoteBalance = balance
+            for _, asset in self.assets.items():
+                asset['data'] = []
+                asset['status'] = 1
+                asset['ts'] = 0
+                asset['orders'] = []
+                asset['params'] = params
+                asset['balance'] = 0
+
+            self.testTrades(ts)
+
+            for _, asset in self.assets.items():
+                if asset['status'] == 2: self.sell(asset)
+
+            profit = self.quoteBalance - balance
+            print("%s : %s" % (params, profit))
+
+            if profit > maxProfit:
+                bestParams = params
+                maxProfit = profit
+
+        print("The best parameters are %s, they earned %s" % (bestParams, maxProfit))
 
     def print(self, asset):
         print(
@@ -149,7 +182,6 @@ class Trader:
                 data[-1] = rec
             else:
                 data.append(rec)
-                if asset['status'] == 2: asset['orderLifeTime'] += 1
                 if log and len(data) > 1 and data[-2]['ts'] != data[-1]['ts']:   
                      self.print(asset)
             if len(data) > 60: data.pop(0)
@@ -157,11 +189,11 @@ class Trader:
             self.indicators(asset)
 
             if asset['status'] == 1 and data[-1]['ts'] != asset['ts'] and self.quoteBalance > asset['orderSize'] and self.buySignal(asset):
-                self.buy(asset) 
+                self.buy(asset,log) 
                 asset['status'] = 2
 
             if asset['status'] == 2 and data[-1]['ts'] != asset['ts'] and self.sellSignal(asset):
-                self.sell(asset)
+                self.sell(asset,log)
                 asset['status'] = 1
 
 
@@ -175,7 +207,7 @@ class Trader:
         self.rsi(asset, 24,'close','rsi24')
         self.macd(asset)
 
-    def buy(self, asset):
+    def buy(self, asset, log=True):
         asset['ts'] = asset['data'][-1]['ts']
         order = defaultdict(lambda:None)
         step = asset['step']
@@ -204,10 +236,9 @@ class Trader:
         self.quoteBalance = round(self.quoteBalance - quote, quoteP)
         asset['balance'] = round(asset['balance'] + order['buyVolume'], assetP)
         asset['orders'].append(order)
-        asset['almostBuySignal'] = False
-        print("Buy order: %s, order size: %s" % (order['buyPrice'], order['buyOrderSize']))
+        if log:print("Buy order: %s, order size: %s" % (order['buyPrice'], order['buyOrderSize']))
 
-    def sell(self, asset):
+    def sell(self, asset, log=True):
         asset['ts'] = asset['data'][-1]['ts']
         orders = asset['orders']
         quoteP = asset['quoteP']
@@ -237,22 +268,20 @@ class Trader:
         orders[-1]['profit'] = round(orders[-1]['sellResult'] - orders[-1]['buyOrderSize'], quoteP)
         self.quoteBalance = round(self.quoteBalance + orders[-1]['sellResult'], quoteP) 
         asset['balance'] = round(balance - qty, assetP)
-        asset['orderLifeTime'] = 0
-        print("Sell order: %s, profit: %s" % (orders[-1]['sellPrice'], orders[-1]['profit']))
+        if log:print("Sell order: %s, profit: %s" % (orders[-1]['sellPrice'], orders[-1]['profit']))
 
     def buySignal(self, asset):
         data = asset['data']
-        if len(data) > 2:
+        if len(data) > 3:
             h1 = data[-2]['macdh']
             h2 = data[-3]['macdh']
-            #macd1 = data[-2]['macd']
-            #macd2 = data[-3]['macd']
+            h3 = data[-4]['macdh']
             r1 = data[-2]['rsi6']
             r2 = data[-3]['rsi6']
-            a = asset['almostBuySignal']
-            if not (h1 is None or h2 is None or r1 is None or r2 is None):
-                if not a and h1 < 0 and r2 <= 30 and r1 <= 30: asset['almostBuySignal'] = True
-                return a and r2 < r1 
+            r3 = data[-4]['rsi6']
+            (b1, b2, b3, b4, b5) = asset['params'][:5]
+            if not (h1 is None or h2 is None or h3 is None or r1 is None or r2 is None or r3 is None):
+                return (b1*(r1-r2) + b2*(r2-r3) + b3*(h1-h2) + b4*(h2-h3) + b5) > 0
             else:
                 return False
         else:
@@ -260,19 +289,21 @@ class Trader:
 
     def sellSignal(self, asset):
         data = asset['data']
-        if len(data) > 2:
-            macd1 = data[-2]['macd']
-            macd2 = data[-3]['macd']
-            if not (macd1 is None or macd2 is None):
-                t = asset['orderLifeTime']
-                p = asset['sellSignalInitPeriod']
-                s0 = asset['sellSignalInitStep']
-                s1 = asset['sellSignalStep']
-                return (t < p and macd2 - macd1 > s0) or (t >= p and macd2 - macd1 > s1)
+        if len(data) > 3:
+            h1 = data[-2]['macdh']
+            h2 = data[-3]['macdh']
+            h3 = data[-4]['macdh']
+            r1 = data[-2]['rsi6']
+            r2 = data[-3]['rsi6']
+            r3 = data[-4]['rsi6']
+            (s1, s2, s3, s4, s5) = asset['params'][-5:]
+            if not (h1 is None or h2 is None or h3 is None or r1 is None or r2 is None or r3 is None):
+                return (s1*(r1-r2) + s2*(r2-r3) + s3*(h1-h2) + s4*(h2-h3) + s5) < 0
             else:
                 return False
         else:
             return False
+
 
     def ema(self, asset, window, s, r):
         data = asset['data']
