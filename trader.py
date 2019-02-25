@@ -311,9 +311,10 @@ class Trader:
             m1 = data[-2]['macd']
             m2 = data[-3]['macd']
             r1 = data[-2]['rsi6']
+            r2 = data[-3]['rsi6']
             (p3, p4) = asset['params'][-2:]
             if not (m1 is None or m2 is None):
-                return r1 < p3 and (m2 - m1) > p4
+                return r2 > p3 and r1 < p3 and (m2 - m1) > p4
             else:
                 return False
         else:
