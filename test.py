@@ -7,7 +7,6 @@ api_secret = os.environ['BINANCE_API_SECRET']
 
 quote = sys.argv[1] if len(sys.argv) > 1 else "USDT"
 assetsConfig = sys.argv[2] if len(sys.argv) > 2 else "assets.txt"
-live = sys.argv[3] == 'live' if len(sys.argv) > 3 else False
+testConfig = sys.argv[3] if len(sys.argv) > 3 else "assets.test.txt"
 
-if live: Trader(api_key, api_secret, quote, assetsConfig, False).start()
-else: Trader(api_key, api_secret, quote, assetsConfig, True).tune('1 week ago', 10, -10, 10, 0.1)
+Trader(api_key, api_secret, quote, assetsConfig, True).tune('4 weeks ago', testConfig)

@@ -33,7 +33,7 @@ class Trader:
             rec['asset'] = p[0]
             rec['orderSize'] = float(p[1])
             rec['interval'] = p[2]
-            rec['params'] = [float(param) for param in p[3:]]
+            rec['params'] = [float(param) for param in p[3:7]]
 
             # Asset balance
             acc = self.client.get_asset_balance(p[0])
@@ -109,27 +109,44 @@ class Trader:
             if next_ts is None: break
             ts = next_ts
 
+    def testAssetTrades(self, start_ts, asset):
+        for msg in asset['history']:self.monitor(msg, False)
+
     def demo(self, start):
         quoteBalance = self.quoteBalance
         print("%s initial balance %s" % (self.baseQuote, quoteBalance))
 
         ts = self.prepareHistory(start)
         self.testTrades(ts)
+
+        for _, asset in self.assets.items():
+            if asset['status'] == 2: self.sell(asset, False)
         
         print("-----------------------------------")
         print("%s result balance %s" % (self.baseQuote, self.quoteBalance))
         for _, asset in self.assets.items():
             print("%s %s: result balance: %s" % (asset['symbol'], asset['interval'], asset['balance']))
 
-    def tune(self, start, size, min, max, step):
-        ts = self.prepareHistory(start)
-        balance = self.quoteBalance
-        maxProfit = 0
-        bestParams = None
+    def tune(self, start, config):
+        f = open(config, "r")
+        for line in f:
+            p = line.split()
+            symbol =  p[0] + self.baseQuote
+            asset = self.assets[symbol + p[2]]
+            asset['testMin'] = [float(min) for min in p[7:11]]
+            asset['testMax'] = [float(max) for max in p[11:15]]
+            asset['testStep'] = [float(step) for step in p[15:19]]
 
-        for params in common.genParams(size, min, max, step):
-            self.quoteBalance = balance
-            for _, asset in self.assets.items():
+        self.prepareHistory(start)
+        balance = self.quoteBalance
+
+        for _, asset in self.assets.items():
+                
+            maxProfit = None
+            bestParams = []
+
+            for params in common.genParams(asset['testMin'], asset['testMax'], asset['testStep']):
+                self.quoteBalance = balance
                 asset['data'] = []
                 asset['status'] = 1
                 asset['ts'] = 0
@@ -137,19 +154,23 @@ class Trader:
                 asset['params'] = params
                 asset['balance'] = 0
 
-            self.testTrades(ts)
+                for msg in asset['history']: self.monitor(msg, False)
+                if asset['status'] == 2: self.sell(asset, False)                                    
 
-            for _, asset in self.assets.items():
-                if asset['status'] == 2: self.sell(asset)
+                profit = round(self.quoteBalance - balance, asset['quoteP'])
+                print("%s : %s" % (params, profit))
 
-            profit = self.quoteBalance - balance
-            print("%s : %s" % (params, profit))
+                if maxProfit is None or profit >= maxProfit:
+                    if bestParams == [] or profit > maxProfit:
+                        bestParams = [params]
+                    else:
+                        bestParams.append(params)
+                    maxProfit = profit
 
-            if profit > maxProfit:
-                bestParams = params
-                maxProfit = profit
-
-        print("The best parameters are %s, they earned %s" % (bestParams, maxProfit))
+            print("The best params:")
+            for p in bestParams: print(p)
+            print("%s %s : max profit %s" % (asset['symbol'], asset['interval'], maxProfit))
+            
 
     def print(self, asset):
         print(
@@ -272,16 +293,13 @@ class Trader:
 
     def buySignal(self, asset):
         data = asset['data']
-        if len(data) > 3:
-            h1 = data[-2]['macdh']
+        if len(data) > 2:
             h2 = data[-3]['macdh']
-            h3 = data[-4]['macdh']
             r1 = data[-2]['rsi6']
             r2 = data[-3]['rsi6']
-            r3 = data[-4]['rsi6']
-            (b1, b2, b3, b4, b5) = asset['params'][:5]
-            if not (h1 is None or h2 is None or h3 is None or r1 is None or r2 is None or r3 is None):
-                return (b1*(r1-r2) + b2*(r2-r3) + b3*(h1-h2) + b4*(h2-h3) + b5) > 0
+            (p1, p2) = asset['params'][:2]
+            if not (h2 is None or r1 is None or r2 is None):
+                return h2 < 0 and r2 < p1 and (r1 -r2) > p2
             else:
                 return False
         else:
@@ -289,16 +307,13 @@ class Trader:
 
     def sellSignal(self, asset):
         data = asset['data']
-        if len(data) > 3:
-            h1 = data[-2]['macdh']
-            h2 = data[-3]['macdh']
-            h3 = data[-4]['macdh']
+        if len(data) > 2:
+            m1 = data[-2]['macd']
+            m2 = data[-3]['macd']
             r1 = data[-2]['rsi6']
-            r2 = data[-3]['rsi6']
-            r3 = data[-4]['rsi6']
-            (s1, s2, s3, s4, s5) = asset['params'][-5:]
-            if not (h1 is None or h2 is None or h3 is None or r1 is None or r2 is None or r3 is None):
-                return (s1*(r1-r2) + s2*(r2-r3) + s3*(h1-h2) + s4*(h2-h3) + s5) < 0
+            (p3, p4) = asset['params'][-2:]
+            if not (m1 is None or m2 is None):
+                return r1 < p3 and (m2 - m1) > p4
             else:
                 return False
         else:

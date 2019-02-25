@@ -7,18 +7,18 @@ def prec(v):
         p+=1
     return p
 
-def genParams(size, min, max, step):
-        p = prec(step)
-        params = [float(min)]*size
+def genParams(mins, maxs, steps):
+        p = [prec(s) for s in steps]
+        params = mins.copy()
         while True:
             yield params
-            if reduce(lambda a, v: a and (v == max), params, True): break
+            if params == maxs: break
             i = -1
             while True:
-                if params[i] < max:
-                    params[i] = round(params[i] + step, p)
+                if params[i] < maxs[i]:
+                    params[i] = round(params[i] + steps[i], p[i])
                     break
                 else:
-                    params[i] = float(min)
+                    params[i] = mins[i]
                     i -= 1
             
