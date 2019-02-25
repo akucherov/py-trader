@@ -9,4 +9,4 @@ quote = sys.argv[1] if len(sys.argv) > 1 else "USDT"
 assetsConfig = sys.argv[2] if len(sys.argv) > 2 else "assets.txt"
 testConfig = sys.argv[3] if len(sys.argv) > 3 else "assets.test.txt"
 
-Trader(api_key, api_secret, quote, assetsConfig, True).tune('4 weeks ago', testConfig)
+Trader(api_key, api_secret, quote, assetsConfig, True).tune('16 weeks ago', testConfig)

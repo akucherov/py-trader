@@ -158,17 +158,18 @@ class Trader:
                 if asset['status'] == 2: self.sell(asset, False)                                    
 
                 profit = round(self.quoteBalance - balance, asset['quoteP'])
-                print("%s : %s" % (params, profit))
+                orders = len(asset['orders'])
+                print("%s : %s %s" % (params, profit, orders))
 
                 if maxProfit is None or profit >= maxProfit:
                     if bestParams == [] or profit > maxProfit:
-                        bestParams = [params]
+                        bestParams = [{'params':params.copy(), 'orders':orders}]
                     else:
-                        bestParams.append(params)
+                        bestParams.append({'params':params.copy(), 'orders':orders})
                     maxProfit = profit
 
             print("The best params:")
-            for p in bestParams: print(p)
+            for p in bestParams: print("%s %s" % (p['params'], p['orders']))
             print("%s %s : max profit %s" % (asset['symbol'], asset['interval'], maxProfit))
             
 
@@ -293,13 +294,13 @@ class Trader:
 
     def buySignal(self, asset):
         data = asset['data']
-        if len(data) > 2:
-            h2 = data[-3]['macdh']
+        if len(data) > 3:
             r1 = data[-2]['rsi6']
             r2 = data[-3]['rsi6']
+            r3 = data[-4]['rsi6']
             (p1, p2) = asset['params'][:2]
-            if not (h2 is None or r1 is None or r2 is None):
-                return h2 < 0 and r2 < p1 and (r1 -r2) > p2
+            if not (r1 is None or r2 is None or r3 is None):
+                return r3 < p1 and r2 < p1 and r1 > p2
             else:
                 return False
         else:
@@ -307,12 +308,13 @@ class Trader:
 
     def sellSignal(self, asset):
         data = asset['data']
-        if len(data) > 2:
+        if len(data) > 3:
             r1 = data[-2]['rsi6']
             r2 = data[-3]['rsi6']
+            r3 = data[-4]['rsi6']
             (p3, p4) = asset['params'][-2:]
-            if not (r1 is None or r2 is None):
-                return r2 > p3 and r1 < p4 
+            if not (r1 is None or r2 is None or r3 is None):
+                return r3 > p3 and r2 > p3 and r1 < p4 
             else:
                 return False
         else:
