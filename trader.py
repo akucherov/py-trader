@@ -228,8 +228,8 @@ class Trader:
         self.ema(asset, 12,'close','ema12')
         #self.ema(asset, 25,'close','ema25')
         self.ema(asset, 26,'close','ema26')
-        #self.rsi(asset, 6,'close','rsi6')
-        self.rsi(asset, 14,'close','rsi14')
+        self.rsi(asset, 6,'close','rsi6')
+        #self.rsi(asset, 14,'close','rsi14')
         #self.rsi(asset, 12,'close','rsi12')
         #self.rsi(asset, 24,'close','rsi24')
         self.macd(asset)
@@ -300,12 +300,12 @@ class Trader:
     def buySignal(self, asset):
         data = asset['data']
         if len(data) > 3:
-            r1 = data[-2]['rsi14']
-            r2 = data[-3]['rsi14']
-            r3 = data[-4]['rsi14']
+            r1 = data[-2]['rsi6']
+            r2 = data[-3]['rsi6']
+            r3 = data[-4]['rsi6']
             (p1, p2) = asset['params'][:2]
             if not (r1 is None or r2 is None or r3 is None):
-                return r3 < p1 and r2 < p1 and (r1 - r2) > p2
+                return r3 < p1 and r2 < p1 and r1 > p2
             else:
                 return False
         else:
@@ -314,12 +314,13 @@ class Trader:
     def sellSignal(self, asset):
         data = asset['data']
         l = asset['orderLifeTime']
-        if len(data) > 2:
-            m1 = data[-2]['macd']
-            m2 = data[-3]['macd']
+        if len(data) > 3:
+            r1 = data[-2]['rsi6']
+            r2 = data[-3]['rsi6']
+            r3 = data[-4]['rsi6']
             (p3, p4, p5) = asset['params'][-3:]
-            if not (m1 is None or m2 is None ):
-                return (l <= p3 and (m2 - m1) > p4) or (l > p3 and (m2 - m1) > p5)
+            if not (r1 is None or r2 is None or r3 is None):
+                return r3 > p3 and r2 > p3 and r1 < p4 or l > p5
             else:
                 return False
         else:
