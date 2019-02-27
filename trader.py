@@ -177,7 +177,7 @@ class Trader:
 
     def print(self, asset):
         print(
-            "%s %s: price: %s, %s balance: %.8f, %s balance: %.8f, ema(7): %s, ema(25): %s, macd: %s, macdh: %s, rsi(6): %s, rsi(12): %s, rsi(24): %s" % 
+            "%s %s: price: %s, %s balance: %.8f, %s balance: %.8f, rsi(6): %s, olt: %s" % 
             (asset['symbol'], 
              asset['interval'], 
              asset['data'][-2]['close'], 
@@ -185,13 +185,8 @@ class Trader:
              self.quoteBalance, 
              asset['asset'], 
              asset['balance'], 
-             asset['data'][-2]['ema7'], 
-             asset['data'][-2]['ema25'], 
-             asset['data'][-2]['macd'], 
-             asset['data'][-2]['macdh'],
              asset['data'][-2]['rsi6'],
-             asset['data'][-2]['rsi12'],
-             asset['data'][-2]['rsi24']))
+             asset['data'][-2]['orderLifeTime']))
 
     def monitor(self, msg, log=True):
         if msg['e'] == 'kline':
@@ -225,14 +220,14 @@ class Trader:
 
     def indicators(self, asset):
         #self.ema(asset, 7,'close','ema7')
-        self.ema(asset, 12,'close','ema12')
+        #self.ema(asset, 12,'close','ema12')
         #self.ema(asset, 25,'close','ema25')
-        self.ema(asset, 26,'close','ema26')
+        #self.ema(asset, 26,'close','ema26')
         self.rsi(asset, 6,'close','rsi6')
         #self.rsi(asset, 14,'close','rsi14')
         #self.rsi(asset, 12,'close','rsi12')
         #self.rsi(asset, 24,'close','rsi24')
-        self.macd(asset)
+        #self.macd(asset)
 
     def buy(self, asset, log=True):
         asset['ts'] = asset['data'][-1]['ts']
