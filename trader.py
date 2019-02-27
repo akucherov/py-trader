@@ -186,7 +186,7 @@ class Trader:
              asset['asset'], 
              asset['balance'], 
              asset['data'][-2]['rsi6'],
-             asset['data'][-2]['orderLifeTime']))
+             asset['orderLifeTime']))
 
     def monitor(self, msg, log=True):
         if msg['e'] == 'kline':
