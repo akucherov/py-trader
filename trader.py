@@ -33,7 +33,7 @@ class Trader:
             rec['asset'] = p[0]
             rec['orderSize'] = float(p[1])
             rec['interval'] = p[2]
-            rec['params'] = [float(param) for param in p[3:7]]
+            rec['params'] = [float(param) for param in p[3:8]]
 
             # Asset balance
             acc = self.client.get_asset_balance(p[0])
@@ -52,6 +52,7 @@ class Trader:
             rec['status'] = 1
             rec['ts'] = 0
             rec['orders'] = []
+            rec['orderLifeTime'] = 0
             self.assets[key] = rec
             print("%s %s: order step: %s, q pr: %s, a pr: %s, price pr: %s" % (symbol, p[2], rec['step'], rec['quoteP'], rec['assetP'], rec['precision']))
         f.close()
@@ -133,9 +134,9 @@ class Trader:
             p = line.split()
             symbol =  p[0] + self.baseQuote
             asset = self.assets[symbol + p[2]]
-            asset['testMin'] = [float(min) for min in p[7:11]]
-            asset['testMax'] = [float(max) for max in p[11:15]]
-            asset['testStep'] = [float(step) for step in p[15:19]]
+            asset['testMin'] = [float(min) for min in p[8:13]]
+            asset['testMax'] = [float(max) for max in p[13:18]]
+            asset['testStep'] = [float(step) for step in p[18:23]]
 
         self.prepareHistory(start)
         balance = self.quoteBalance
@@ -153,6 +154,7 @@ class Trader:
                 asset['orders'] = []
                 asset['params'] = params
                 asset['balance'] = 0
+                asset['orderLifeTime'] = 0
 
                 for msg in asset['history']: self.monitor(msg, False)
                 if asset['status'] == 2: self.sell(asset, False)                                    
@@ -206,6 +208,7 @@ class Trader:
                 data.append(rec)
                 if log and len(data) > 1 and data[-2]['ts'] != data[-1]['ts']:   
                      self.print(asset)
+                if asset['status'] == 2: asset['orderLifeTime'] += 1
             if len(data) > 60: data.pop(0)
 
             self.indicators(asset)
@@ -213,6 +216,7 @@ class Trader:
             if asset['status'] == 1 and data[-1]['ts'] != asset['ts'] and self.quoteBalance > asset['orderSize'] and self.buySignal(asset):
                 self.buy(asset,log) 
                 asset['status'] = 2
+                asset['orderLifeTime'] = 0
 
             if asset['status'] == 2 and data[-1]['ts'] != asset['ts'] and self.sellSignal(asset):
                 self.sell(asset,log)
@@ -220,13 +224,14 @@ class Trader:
 
 
     def indicators(self, asset):
-        self.ema(asset, 7,'close','ema7')
+        #self.ema(asset, 7,'close','ema7')
         self.ema(asset, 12,'close','ema12')
-        self.ema(asset, 25,'close','ema25')
+        #self.ema(asset, 25,'close','ema25')
         self.ema(asset, 26,'close','ema26')
-        self.rsi(asset, 6,'close','rsi6')
-        self.rsi(asset, 12,'close','rsi12')
-        self.rsi(asset, 24,'close','rsi24')
+        #self.rsi(asset, 6,'close','rsi6')
+        self.rsi(asset, 14,'close','rsi14')
+        #self.rsi(asset, 12,'close','rsi12')
+        #self.rsi(asset, 24,'close','rsi24')
         self.macd(asset)
 
     def buy(self, asset, log=True):
@@ -295,12 +300,12 @@ class Trader:
     def buySignal(self, asset):
         data = asset['data']
         if len(data) > 3:
-            r1 = data[-2]['rsi6']
-            r2 = data[-3]['rsi6']
-            r3 = data[-4]['rsi6']
+            r1 = data[-2]['rsi14']
+            r2 = data[-3]['rsi14']
+            r3 = data[-4]['rsi14']
             (p1, p2) = asset['params'][:2]
             if not (r1 is None or r2 is None or r3 is None):
-                return r3 < p1 and r2 < p1 and r1 > p2
+                return r3 < p1 and r2 < p1 and (r1 - r2) > p2
             else:
                 return False
         else:
@@ -308,13 +313,13 @@ class Trader:
 
     def sellSignal(self, asset):
         data = asset['data']
-        if len(data) > 3:
-            r1 = data[-2]['rsi6']
-            r2 = data[-3]['rsi6']
-            r3 = data[-4]['rsi6']
-            (p3, p4) = asset['params'][-2:]
-            if not (r1 is None or r2 is None or r3 is None):
-                return r3 > p3 and r2 > p3 and r1 < p4 
+        l = asset['orderLifeTime']
+        if len(data) > 2:
+            m1 = data[-2]['macd']
+            m2 = data[-3]['macd']
+            (p3, p4, p5) = asset['params'][-3:]
+            if not (m1 is None or m2 is None ):
+                return (l <= p3 and (m2 - m1) > p4) or (l > p4 and (m2 - m1) > p5)
             else:
                 return False
         else:
