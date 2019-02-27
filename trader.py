@@ -319,7 +319,7 @@ class Trader:
             m2 = data[-3]['macd']
             (p3, p4, p5) = asset['params'][-3:]
             if not (m1 is None or m2 is None ):
-                return (l <= p3 and (m2 - m1) > p4) or (l > p4 and (m2 - m1) > p5)
+                return (l <= p3 and (m2 - m1) > p4) or (l > p3 and (m2 - m1) > p5)
             else:
                 return False
         else:
