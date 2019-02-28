@@ -143,7 +143,6 @@ class Trader:
 
         for _, asset in self.assets.items():
                 
-            maxProfit = None
             bestParams = []
 
             for params in common.genParams(asset['testMin'], asset['testMax'], asset['testStep']):
@@ -163,17 +162,19 @@ class Trader:
                 orders = len(asset['orders'])
                 print("%s : %s %s" % (params, profit, orders))
 
-                if maxProfit is None or profit >= maxProfit:
-                    if bestParams == [] or profit > maxProfit:
-                        bestParams = [{'params':params.copy(), 'orders':orders}]
-                    else:
-                        bestParams.append({'params':params.copy(), 'orders':orders})
-                    maxProfit = profit
+                if bestParams == [] or profit > bestParams[-1]['profit']:
+                    bestParams.append({'params':[params.copy()], 'orders':[orders], 'profit':profit})
+                elif profit in [i['profit'] for i in bestParams]:
+                    index = [i['profit'] for i in bestParams].index(profit)
+                    bestParams[index]['params'].append(params.copy())
+                    bestParams[index]['orders'].append(orders)
+                else:
+                    bestParams.insert(0, {'params':[params.copy()], 'orders':[orders], 'profit':profit})
+                    bestParams.sort(key=lambda x: x['profit'])
+                if len(bestParams) > 5: bestParams.pop(0)
 
-            print("The best params:")
-            for p in bestParams: print("%s %s" % (p['params'], p['orders']))
-            print("%s %s : max profit %s" % (asset['symbol'], asset['interval'], maxProfit))
-            
+            print("The best params for %s %s:" % (asset['symbol'], asset['interval']))
+            for p in bestParams: print("%s, %s, %s" % (p['profit'], p['orders'], p['params'])) 
 
     def print(self, asset):
         print(
