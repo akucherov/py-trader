@@ -173,8 +173,19 @@ class Trader:
                     bestParams.sort(key=lambda x: x['profit'])
                 if len(bestParams) > 5: bestParams.pop(0)
 
+            
             print("The best params for %s %s:" % (asset['symbol'], asset['interval']))
-            for p in bestParams: print("%s, %s, %s" % (p['profit'], p['orders'], p['params'])) 
+            for p in bestParams: 
+                print("%s, %s, %s" % (p['profit'], p['orders'], p['params'])) 
+            
+            # winners = []
+            # for p in bestParams[:-1]:
+            #     for pp in p['params']: winners.append({'params':pp, 'wins':0})
+            # for pp in bestParams[-1]['params']: winners.append({'params':pp, 'wins':1})
+
+            
+
+            
 
     def print(self, asset):
         print(
