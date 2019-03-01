@@ -88,6 +88,7 @@ class Trader:
                 msg = {'e':'kline', 'k':{'t':k[0], 's': symbol, 'i': interval, 'o':k[1], 'c':k[4]}}
                 asset['history'].append(msg)
                 asset['demo_index'] = 0
+            asset['periods'] = common.periods(len(asset['history']), 16)
             if log:
                 print("%s %s: %s records, initial balance: %s" % (asset['symbol'], asset['interval'], len(klines), asset['balance']))
         return ts
@@ -128,7 +129,7 @@ class Trader:
         for _, asset in self.assets.items():
             print("%s %s: result balance: %s" % (asset['symbol'], asset['interval'], asset['balance']))
 
-    def tune(self, start, config):
+    def tune(self, config):
         f = open(config, "r")
         for line in f:
             p = line.split()
@@ -138,12 +139,13 @@ class Trader:
             asset['testMax'] = [float(max) for max in p[13:18]]
             asset['testStep'] = [float(step) for step in p[18:23]]
 
-        self.prepareHistory(start)
+        self.prepareHistory('16 weeks ago')
         balance = self.quoteBalance
 
         for _, asset in self.assets.items():
                 
             bestParams = []
+            periods = asset['periods']
 
             for params in common.genParams(asset['testMin'], asset['testMax'], asset['testStep']):
                 self.quoteBalance = balance
@@ -155,7 +157,7 @@ class Trader:
                 asset['balance'] = 0
                 asset['orderLifeTime'] = 0
 
-                for msg in asset['history']: self.monitor(msg, False)
+                for msg in asset['history'][periods[-1]:]: self.monitor(msg, False)
                 if asset['status'] == 2: self.sell(asset, False)                                    
 
                 profit = round(self.quoteBalance - balance, asset['quoteP'])
@@ -178,10 +180,60 @@ class Trader:
             for p in bestParams: 
                 print("%s, %s, %s" % (p['profit'], p['orders'], p['params'])) 
             
-            # winners = []
-            # for p in bestParams[:-1]:
-            #     for pp in p['params']: winners.append({'params':pp, 'wins':0})
-            # for pp in bestParams[-1]['params']: winners.append({'params':pp, 'wins':1})
+            winners = []
+            for p in bestParams[:-1]:
+                for pp in p['params']: winners.append({'params':pp, 'wins':0})
+            for pp in bestParams[-1]['params']: winners.append({'params':pp, 'wins':1})
+
+            prev_period = 0
+            for period in periods[:-1]:
+                bestParams = []
+                for params in [winner['params'] for winner in winners]:
+                    self.quoteBalance = balance
+                    asset['data'] = []
+                    asset['status'] = 1
+                    asset['ts'] = 0
+                    asset['orders'] = []
+                    asset['params'] = params
+                    asset['balance'] = 0
+                    asset['orderLifeTime'] = 0
+
+                    for msg in asset['history'][prev_period:period]: self.monitor(msg, False)
+                    if asset['status'] == 2: self.sell(asset, False)
+
+                    profit = round(self.quoteBalance - balance, asset['quoteP'])
+                    orders = len(asset['orders'])
+                    print("%s : %s %s" % (params, profit, orders))
+
+                    if bestParams == [] or profit > bestParams[-1]['profit']:
+                        bestParams.append({'params':[params.copy()], 'orders':[orders], 'profit':profit})
+                    elif profit in [i['profit'] for i in bestParams]:
+                        index = [i['profit'] for i in bestParams].index(profit)
+                        bestParams[index]['params'].append(params.copy())
+                        bestParams[index]['orders'].append(orders)
+                    else:
+                        bestParams.insert(0, {'params':[params.copy()], 'orders':[orders], 'profit':profit})
+                        bestParams.sort(key=lambda x: x['profit'])
+                    if len(bestParams) > 5: bestParams.pop(0)
+                
+                print("The best params for %s %s:" % (asset['symbol'], asset['interval']))
+                for p in bestParams: 
+                    print("%s, %s, %s" % (p['profit'], p['orders'], p['params']))
+
+                if bestParams[-1]['profit'] > 0:
+                    for pp in bestParams[-1]['params']: 
+                        for winner in winners:
+                            if winner['params'] == pp: winner['wins'] += 1
+
+                prev_period = period
+            
+            winners.sort(key=lambda x:x['wins'], reverse=True)
+
+            print("Final result:")
+            print(winners)
+
+            
+
 
 
     def print(self, asset):

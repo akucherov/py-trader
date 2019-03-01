@@ -1,4 +1,5 @@
 from functools import reduce
+from math import floor
 
 def prec(v):
     p=0
@@ -25,3 +26,6 @@ def genParams(mins, maxs, steps):
                     i -= 1
                     if i < l: break
             
+def periods(l,n):
+    p = floor(l/n)
+    return [(i)*p for i in range(1,n)]
