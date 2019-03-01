@@ -183,21 +183,24 @@ class Trader:
             #     for pp in p['params']: winners.append({'params':pp, 'wins':0})
             # for pp in bestParams[-1]['params']: winners.append({'params':pp, 'wins':1})
 
-            
-
-            
 
     def print(self, asset):
         print(
-            "%s %s: price: %s, %s balance: %.8f, %s balance: %.8f, rsi(6): %s, olt: %s" % 
+            "%s %s: price: %s:%s, %s balance: %.8f, %s balance: %.8f, rsi(6): %s, macd: %s, macds: %s, macdh: %s, macdmin: %s, macdmax: %s, olt: %s" % 
             (asset['symbol'], 
              asset['interval'], 
+             asset['data'][-2]['open'], 
              asset['data'][-2]['close'], 
              self.baseQuote, 
              self.quoteBalance, 
              asset['asset'], 
              asset['balance'], 
              asset['data'][-2]['rsi6'],
+             asset['data'][-2]['macd'],
+             asset['data'][-2]['macds'],
+             asset['data'][-2]['macdh'],
+             asset['data'][-2]['macdmin'],
+             asset['data'][-2]['macdmax'],
              asset['orderLifeTime']))
 
     def monitor(self, msg, log=True):
@@ -213,9 +216,10 @@ class Trader:
                 data[-1] = rec
             else:
                 data.append(rec)
-                if log and len(data) > 1 and data[-2]['ts'] != data[-1]['ts']:   
-                     self.print(asset)
+                self.summaryIndicators(data)
+                if log and len(data) > 1 and data[-2]['ts'] != data[-1]['ts']: self.print(asset)
                 if asset['status'] == 2: asset['orderLifeTime'] += 1
+                
             if len(data) > 60: data.pop(0)
 
             self.indicators(asset)
@@ -232,14 +236,31 @@ class Trader:
 
     def indicators(self, asset):
         #self.ema(asset, 7,'close','ema7')
-        #self.ema(asset, 12,'close','ema12')
+        self.ema(asset, 12,'close','ema12')
         #self.ema(asset, 25,'close','ema25')
-        #self.ema(asset, 26,'close','ema26')
+        self.ema(asset, 26,'close','ema26')
         self.rsi(asset, 6,'close','rsi6')
         #self.rsi(asset, 14,'close','rsi14')
         #self.rsi(asset, 12,'close','rsi12')
         #self.rsi(asset, 24,'close','rsi24')
-        #self.macd(asset)
+        self.macd(asset)
+
+    def summaryIndicators(self, data):
+        if len(data) > 2:
+            macd = data[-2]['macd']
+            macdh = data[-2]['macdh']
+            macdmin = data[-3]['macdhmin']
+            macdmax = data[-3]['macdhmax']
+
+            #local macd minimum
+            if not macd is None and not macdh is None and macdh <= 0:
+                if macdmin is None or macd < macdmin:
+                    data[-2]['macdmin'] = macd
+
+            #local macd maximum
+            if not macd is None and not macdh is None and macdh >= 0:
+                if macdmax is None or macd > macdmax:
+                    data[-2]['macdmax'] = macd
 
     def buy(self, asset, log=True):
         asset['ts'] = asset['data'][-1]['ts']
@@ -248,13 +269,15 @@ class Trader:
         quoteP = asset['quoteP']
         assetP = asset['assetP']
         order['buy'] = asset['ts']
-        value = round(floor((asset['orderSize'] / asset['data'][-1]['close']) / step) * step, assetP)
+        
 
         if self.test:
-            quote = round(asset['data'][-1]['close'] * value, quoteP)
+            value = round(floor((asset['orderSize'] / asset['data'][-1]['open']) / step) * step, assetP)
+            quote = round(asset['data'][-1]['open'] * value, quoteP)
             qty = value
             commission = round(value / 1000, assetP)
         else:
+            value = round(floor((asset['orderSize'] / asset['data'][-1]['close']) / step) * step, assetP)
             trx = self.client.order_market_buy(symbol=asset['symbol'], quantity=value, newOrderRespType='FULL')
 
             if trx['status'] == 'FILLED':
@@ -284,7 +307,7 @@ class Trader:
         value = round(floor(balance / step) * step, assetP)
 
         if self.test:
-            quote = round(asset['data'][-1]['close'] * value, quoteP)
+            quote = round(asset['data'][-1]['open'] * value, quoteP)
             qty = value
             commission = round(quote / 1000, quoteP)
         else:
@@ -303,6 +326,37 @@ class Trader:
         self.quoteBalance = round(self.quoteBalance + orders[-1]['sellResult'], quoteP) 
         asset['balance'] = round(balance - qty, assetP)
         if log:print("Sell order: %s, profit: %s" % (orders[-1]['sellPrice'], orders[-1]['profit']))
+
+    def buySignalTest(self, asset):
+        data = asset['data']
+        if len(data) > 1:
+            r = data[-2]['rsi6']
+            macd = data[-2]['macd'] 
+            macdmin = data[-2]['macdmin']
+            (p1, _) = asset['params'][:2]
+            if not (r is None or macd is None or macdmin is None):
+                return r < p1 and macd == macdmin
+            else:
+                return False
+        else:
+            return False
+
+    def sellSignalTest(self, asset):
+        data = asset['data']
+        if len(data) > 1:
+            r = data[-2]['rsi6']
+            macd = data[-2]['macd']
+            macdp = data[-3]['macd']
+            macdh = data[-2]['macdh']
+            macdmax = data[-2]['macdmax']
+            (p3, p4, _) = asset['params'][-3:]
+            if not (r is None or macd is None or macdp is None or macdh is None or macdmax is None):
+                return (macdp - macd  > p4) or (r > p3 and macd == macdmax)
+            else:
+                return False
+        else:
+            return False
+
 
     def buySignal(self, asset):
         data = asset['data']
