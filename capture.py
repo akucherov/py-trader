@@ -22,4 +22,4 @@ df.pop('r1')
 df.pop('r2')
 df.pop('r3')
 
-df.to_csv(path_or_buf="data/"+start+"-"+symbol+"-"+interval, index=False)
+df.to_csv(path_or_buf="data/"+start+"-"+symbol+"-"+interval+".csv", index=False)
