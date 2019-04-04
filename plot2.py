@@ -3,8 +3,20 @@ import plotly.plotly as py
 from plotly import figure_factory as FF
 from datetime import datetime
 import plotly.io as pio
+from LinearRegressionStrategy import LinearRegressionStrategy
 
-df = pd.read_csv('./data/2018-1-1-BTCUSDT-5m.csv').take(range(48,60))
+df = pd.read_csv('./data/2018-1-1-BTCUSDT-5m.csv').take(range(20, 24))
+
+strategy = LinearRegressionStrategy()
+
+for _, row in df.iterrows():
+    strategy.capture(row['Open time'], row['Open'], row['Close'], row['High'], row['Low'], row['Volume'], row['Number of trades'])
+
+#print(strategy.local_min)
+print(strategy.ts)
+print(strategy.pr)
+print(strategy.line)
+
 df["Open time"] = df["Open time"]/1000
 df["Open time"] = df["Open time"].apply(datetime.fromtimestamp)
 df.set_index('Open time', inplace=True)
