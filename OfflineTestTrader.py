@@ -25,12 +25,12 @@ class OfflineTestTrader:
             
             if self.status == 0 and self.quoteBalance >= self.orderSize and self.strategy.buySignal():
                 self.status = 1
-                self.buy(row['Open time'], row['Close'])
+                self.buy(row['Open time'], row['Open'])
                 self.ts = row['Open time']
 
             if self.status == 1 and self.ts != row['Open time'] and self.strategy.sellSignal():
                 self.status = 0
-                self.sell(row['Open time'], row['Close'])
+                self.sell(row['Open time'], row['Open'])
                 self.ts = row['Open time']
 
     def buy(self, ts, price, log=True):

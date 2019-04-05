@@ -8,7 +8,7 @@ api_secret = os.environ['BINANCE_API_SECRET']
 
 symbol = sys.argv[1] if len(sys.argv) > 1 else "BTCUSDT"
 interval = sys.argv[2] if len(sys.argv) > 2 else "5m"
-start = sys.argv[3] if len(sys.argv) > 3 else "2018-1-1"
+start = sys.argv[3] if len(sys.argv) > 3 else "2019-1-1"
 finish = sys.argv[4] if len(sys.argv) > 4 else "now"
 
 bc = Client(api_key, api_secret)
