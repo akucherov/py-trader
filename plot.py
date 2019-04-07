@@ -1,22 +1,18 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from datetime import datetime
-from mpl_finance import candlestick_ohlc
-import matplotlib.dates as mdates
+from AltBaseStrategy import BaseStrategy
 
-df = pd.read_csv('./data/2018-1-1-BTCUSDT-5m.csv').head()
+df = pd.read_csv('./data/2018-1-1-BTCUSDT-5m.csv').take(range(10))
 
-df["Open time"] = df["Open time"]/1000
-df["Open time"] = df["Open time"].apply(datetime.fromtimestamp)
-df["Open time"] = df["Open time"].apply(mdates.date2num)
+strategy = BaseStrategy(size=10)
 
-ohlc= df[['Open time', 'Open', 'High', 'Low','Close']].copy()
+for _, row in df.iterrows():
+    ts = datetime.fromtimestamp(row['Open time']/1000)
+    strategy.capture(ts, row['Open'], row['Close'], row['High'], row['Low'], row['Volume'], row['Number of trades'])
 
-f1, ax = plt.subplots(figsize = (10,10))
 
-print(ohlc.values)
-
-candlestick_ohlc(ax, ohlc.values, width=.6, colorup='green', colordown='red')
-ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-plt.savefig('./data/2018-1-1-BTCUSDT-5m.png')
+strategy.df.drop(pd.Timestamp('2018-01-01 11:00:00'), inplace=True)
+print(strategy.df.shape)
+print(strategy.df)
+print(strategy.df.index)
