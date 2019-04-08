@@ -16,6 +16,7 @@
 *.launch
 .settings/
 .vscode
+.ipynb_checkpoints
 
 # IDE - VSCode
 .vscode/*
