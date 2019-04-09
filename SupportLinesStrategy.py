@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+from datetime import datetime
 from scipy.signal import argrelextrema
 from AltBaseStrategy import BaseStrategy
 
@@ -11,33 +13,40 @@ class SupportLinesStrategy(BaseStrategy):
     def indicators(self):
         self.df['min'] = self.df.iloc[argrelextrema(self.df.close.values, np.less_equal, order=self.n)[0]]['close']
         self.df['max'] = self.df.iloc[argrelextrema(self.df.close.values, np.greater_equal, order=self.n)[0]]['close']
-        self.mins = []
-        self.maxs = []
+        self.mins, self.min_lines = self.supportLines(self.df['min'].dropna().items())
+        self.maxs, self.max_lines = self.supportLines(self.df['max'].dropna().items())
+            
+    def supportLines(self, prices):
+        k = []
+        lines = []
+        xs = []   
+        ys = []
+        n = 0
 
-        min_x = []
-        min_y = []
-        min_n = 0
-        for ts, y in self.df['min'].dropna().items():
+        for ts, y in prices:
             x = ts.timestamp()
-            if len(min_x) < 2:
-                min_x.append(x)
-                min_y.append(y)
+            if len(xs) < 2:
+                xs.append(x)
+                ys.append(y)
             else:
-                b_0, b_1 = self.regression(np.array(min_x), np.array(min_y))
-                if len(self.mins) > min_n: self.mins[min_n] = [b_0,b_1]
-                else: self.mins.append([b_0,b_1])
+                b_0, b_1 = self.regression(np.array(xs), np.array(ys))
                 py = b_0 + b_1 * x
+                if len(k) > n: k[n] = [b_0,b_1]
+                else: k.append([b_0,b_1])
                 d = abs(round((y/py-1)*100,2))
                 if d > self.delta:
-                    min_x = [x]
-                    min_y = [y]
-                    min_n += 1
+                    lines.append([[pd.Timestamp.utcfromtimestamp(xs[0]), b_0 + b_1 * xs[0]], [ts, py]])
+                    xs = [x]
+                    ys = [y]
+                    n += 1
                 else:
-                    min_x.append(x)
-                    min_y.append(y)
-
-            
-                
+                    xs.append(x)
+                    ys.append(y)
+        if len(xs) > 1:
+            b_0, b_1 = self.regression(np.array(xs), np.array(ys))
+            k.append([b_0,b_1])
+            lines.append([[pd.Timestamp.utcfromtimestamp(xs[0]), b_0 + b_1 * xs[0]], [pd.Timestamp.utcfromtimestamp(xs[-1]), b_0 + b_1 * xs[-1]]])
+        return (k, lines)
 
     def regression(self, x, y):  
         m_x, m_y = np.mean(x), np.mean(y) 
