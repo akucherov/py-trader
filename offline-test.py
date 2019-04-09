@@ -1,11 +1,8 @@
-from SimpleEMAStrategy import SimpleEMAStrategy
-from MACDRSIStrategy import MACDRSIStrategy
 from OfflineTestTrader import OfflineTestTrader
-from LinearRegressionStrategy import LinearRegressionStrategy
+from SupportLinesStrategy import SupportLinesStrategy
 
-#strategy = LinearRegressionStrategy(3,-1)
-strategy = MACDRSIStrategy(14, 30, 70)
-trader = OfflineTestTrader("./data/2019-1-1-BTCUSDT-5m.csv", strategy, 1000, 500)
+strategy = SupportLinesStrategy(n=36, k1=1, k3=1)
+trader = OfflineTestTrader("./data/2019-1-1-BTCUSDT-5m.csv", strategy, 1000, 100)
 
 trader.run()
 

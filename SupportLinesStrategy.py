@@ -5,16 +5,59 @@ from scipy.signal import argrelextrema
 from AltBaseStrategy import BaseStrategy
 
 class SupportLinesStrategy(BaseStrategy):
-    def __init__(self, n=8, size=288):
+    buy = None
+    sell = None
+    precision = 4
+
+    def __init__(self, n=36, k1=1, k2=1, k3=1, size=288):
         BaseStrategy.__init__(self, size)
         self.n = n
-        self.delta = 1
+        self.delta = k1
+        self.buyDelta = k2
+        self.sellDelta = k3
 
     def indicators(self):
         self.df['min'] = self.df.iloc[argrelextrema(self.df.close.values, np.less_equal, order=self.n)[0]]['close']
         self.df['max'] = self.df.iloc[argrelextrema(self.df.close.values, np.greater_equal, order=self.n)[0]]['close']
         self.mins, self.min_lines = self.supportLines(self.df['min'].dropna().items())
         self.maxs, self.max_lines = self.supportLines(self.df['max'].dropna().items())
+
+        ts = self.df.tail(1).index[0]
+        x = ts.timestamp()
+        if len(self.maxs) > 0 and len(self.mins) > 0:
+            bb0, bb1 = self.maxs[-1]
+            bpp = bb0 + bb1*x
+            sb0, sb1 = self.mins[-1]
+            spp = sb0 + sb1*x
+            rp = self.df.tail(1)['close'][0]
+
+            if sb1 > 0 and round(((rp - bpp)/bpp)*100, 2) > self.buyDelta and bpp > spp:
+                self.addBuyPoint(ts, rp)
+
+            if round(((spp - rp)/rp)*100, 2) > self.sellDelta:
+                self.addSellPoint(ts, rp)                        
+
+    def buySignal(self):
+        return not self.buy is None and self.df.tail(1).index[0] == self.buy.tail(1).index[0]
+
+    def sellSignal(self):
+        return not self.sell is None and self.df.tail(1).index[0] == self.sell.tail(1).index[0]
+
+    def addBuyPoint(self, ts, price):
+        rec = pd.DataFrame(
+            data=[[ts,price]],
+            columns=['ts','price'])
+        rec.set_index('ts', inplace=True)
+        if self.buy is None: self.buy = rec
+        else: self.buy = pd.concat([self.buy, rec])
+
+    def addSellPoint(self, ts, price):
+        rec = pd.DataFrame(
+            data=[[ts,price]],
+            columns=['ts','price'])
+        rec.set_index('ts', inplace=True)
+        if self.sell is None: self.sell = rec
+        else: self.sell = pd.concat([self.sell, rec])
             
     def supportLines(self, prices):
         k = []
