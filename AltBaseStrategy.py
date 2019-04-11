@@ -11,8 +11,8 @@ class BaseStrategy:
     def capture(self, ts, o, c, h, l, v, t):
         key = pd.Timestamp(ts)
         rec = pd.DataFrame(
-            data=[[key,float(o),float(c),float(h),float(l),float(v),int(t)]],
-            columns=['ts','open','close','high','low','volume','trades'])
+            data=[[key,float(o),float(c),float(h),float(l),float(v),int(t),None,None]],
+            columns=['ts','open','close','high','low','volume','trades','min','max'])
         rec.set_index('ts', inplace=True)
         if self.cr is None:
             self.cr = rec
@@ -27,6 +27,10 @@ class BaseStrategy:
             s, _ = self.df.shape
             if s > self.size: 
                 self.df.drop(next(self.df.iterrows())[0], inplace=True)
+            if s > 2:
+                v = float(self.df['close'][-2])
+                if self.df.close[-1] > v and self.df.close[-3] > v: self.df['min'][self.df.index[-2]] = v                
+                if self.df.close[-1] < v and self.df.close[-3] < v: self.df['max'][self.df.index[-2]] = v
             self.indicators()
 
     def indicators(self):

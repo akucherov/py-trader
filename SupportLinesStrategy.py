@@ -17,8 +17,9 @@ class SupportLinesStrategy(BaseStrategy):
         self.sellDelta = k3
 
     def indicators(self):
-        self.df['min'] = self.df.iloc[argrelextrema(self.df.close.values, np.less_equal, order=self.n)[0]]['close']
-        self.df['max'] = self.df.iloc[argrelextrema(self.df.close.values, np.greater_equal, order=self.n)[0]]['close']
+        #self.df['min'] = self.df.iloc[argrelextrema(self.df.close.values, np.less_equal, order=self.n)[0]]['close']
+        #self.df['max'] = self.df.iloc[argrelextrema(self.df.close.values, np.greater_equal, order=self.n)[0]]['close']
+        
         self.mins, self.min_lines = self.supportLines(self.df['min'].dropna().items())
         self.maxs, self.max_lines = self.supportLines(self.df['max'].dropna().items())
 
@@ -35,7 +36,7 @@ class SupportLinesStrategy(BaseStrategy):
                 self.addBuyPoint(ts, rp)
 
             if round(((spp - rp)/rp)*100, 2) > self.sellDelta:
-                self.addSellPoint(ts, rp)                        
+                self.addSellPoint(ts, rp)                         
 
     def buySignal(self):
         return not self.buy is None and self.df.tail(1).index[0] == self.buy.tail(1).index[0]
