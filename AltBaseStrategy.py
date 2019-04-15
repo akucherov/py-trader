@@ -1,36 +1,37 @@
+from datetime import datetime
 import pandas as pd
 
 class BaseStrategy:
 
     df = None
     cr = None
+    buyTS = None
+    sellTS = None
 
     def __init__(self, size=288):
         self.size = size
 
     def capture(self, ts, o, c, h, l, v, t):
-        key = pd.Timestamp(ts)
+        key = self.getKey(ts)
         rec = pd.DataFrame(
-            data=[[key,float(o),float(c),float(h),float(l),float(v),int(t),None,None]],
-            columns=['ts','open','close','high','low','volume','trades','min','max'])
+            data=[[key,float(o),float(c),float(h),float(l),float(v),int(t)]],
+            columns=['ts','open','close','high','low','volume','trades'])
         rec.set_index('ts', inplace=True)
         if self.cr is None:
             self.cr = rec
-        elif self.cr.tail(1).index[0] == key:
+        elif self.cr.iloc[0].name == key:
             self.cr = rec
         elif self.df is None:
             self.df = self.cr
             self.cr = rec
         else:
-            self.df = pd.concat([self.df, self.cr], sort=False)
+            self.df = self.df.append(self.cr, sort=False)
             self.cr = rec
             s, _ = self.df.shape
-            if s > self.size: 
-                self.df.drop(next(self.df.iterrows())[0], inplace=True)
-            if s > 2:
-                v = float(self.df['close'][-2])
-                if self.df.close[-1] > v and self.df.close[-3] > v: self.df['min'][self.df.index[-2]] = v                
-                if self.df.close[-1] < v and self.df.close[-3] < v: self.df['max'][self.df.index[-2]] = v
+            if not self.buyTS is None and s > self.size:
+                self.df = self.df[self.buyTS:]
+            elif s > self.size: 
+                self.df = self.df.iloc[-self.size:]
             self.indicators()
 
     def indicators(self):
@@ -41,3 +42,39 @@ class BaseStrategy:
 
     def sellSignal(self):
         return False
+
+    def setBuyTS(self, ts):
+        self.buyTS = self.getKey(ts)
+        self.sellTS = None
+
+    def setSellTS(self, ts):
+        self.sellTS = self.getKey(ts)
+        self.buyTS = None
+
+    def getKey(self, ts):
+        return pd.Timestamp(datetime.fromtimestamp(int(ts)/1000))
+        
+    def SMA(self, df, column="Close", period=20):
+        sma = df[column].rolling(window=period, min_periods=period - 1).mean()
+        if 'SMA'+str(period) in df.columns.values: df.drop('SMA'+str(period), axis=1, inplace=True)
+        return df.join(sma.to_frame('SMA'+str(period)))
+
+    def EMA(self, df, column="Close", period=20):
+        ema = df[column].ewm(span=period, min_periods=period - 1).mean()
+        if 'EMA'+str(period) in df.columns.values: df.drop('EMA'+str(period), axis=1, inplace=True)
+        return df.join(ema.to_frame('EMA'+str(period)))
+
+    def RSI(self, df, column="Close", period=14):
+        delta = df[column].diff()
+        up, down = delta.copy(), delta.copy()
+
+        up[up < 0] = 0
+        down[down > 0] = 0
+
+        rUp = up.ewm(com=period - 1,  adjust=False).mean()
+        rDown = down.ewm(com=period - 1, adjust=False).mean().abs()
+
+        rsi = 100 - 100 / (1 + rUp / rDown)    
+
+        if 'RSI'+str(period) in df.columns.values: df.drop('RSI'+str(period), axis=1, inplace=True)
+        return df.join(rsi.to_frame('RSI'+str(period)))
