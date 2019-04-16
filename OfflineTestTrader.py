@@ -5,8 +5,11 @@ from collections import defaultdict
 
 class OfflineTestTrader:
 
-    def __init__(self, csv, strategy, balance=1000, orderSize=100, step=0.000001, assetPrecision=8, quotePrecision=8):
-        self.df = pd.read_csv(csv)
+    def __init__(self, csv, strategy, balance=1000, orderSize=100, step=0.000001, assetPrecision=8, quotePrecision=8, range=None):
+        if range is None:
+            self.df = pd.read_csv(csv)
+        else:
+            self.df = pd.read_csv(csv).take(range)
         self.strategy = strategy
         self.status = 0
         self.ts = 0
@@ -27,11 +30,13 @@ class OfflineTestTrader:
                 self.status = 1
                 self.buy(row['Open time'], row['Open'])
                 self.ts = row['Open time']
+                self.strategy.setBuyTS()
 
             if self.status == 1 and self.ts != row['Open time'] and self.strategy.sellSignal():
                 self.status = 0
                 self.sell(row['Open time'], row['Open'])
                 self.ts = row['Open time']
+                self.strategy.setSellTS()
 
     def buy(self, ts, price, log=True):
         order = defaultdict(lambda:None)

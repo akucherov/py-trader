@@ -10,6 +10,7 @@ class BaseStrategy:
 
     def __init__(self, size=288):
         self.size = size
+        self.precision = 4
 
     def capture(self, ts, o, c, h, l, v, t):
         key = self.getKey(ts)
@@ -43,28 +44,28 @@ class BaseStrategy:
     def sellSignal(self):
         return False
 
-    def setBuyTS(self, ts):
-        self.buyTS = self.getKey(ts)
+    def setBuyTS(self):
+        self.buyTS = self.df.iloc[-1].name
         self.sellTS = None
 
-    def setSellTS(self, ts):
-        self.sellTS = self.getKey(ts)
+    def setSellTS(self):
+        self.sellTS = self.df.iloc[-1].name
         self.buyTS = None
 
     def getKey(self, ts):
         return pd.Timestamp(datetime.fromtimestamp(int(ts)/1000))
         
-    def SMA(self, df, column="Close", period=20):
+    def SMA(self, df, column="close", period=20):
         sma = df[column].rolling(window=period, min_periods=period - 1).mean()
         if 'SMA'+str(period) in df.columns.values: df.drop('SMA'+str(period), axis=1, inplace=True)
         return df.join(sma.to_frame('SMA'+str(period)))
 
-    def EMA(self, df, column="Close", period=20):
+    def EMA(self, df, column="close", period=20):
         ema = df[column].ewm(span=period, min_periods=period - 1).mean()
         if 'EMA'+str(period) in df.columns.values: df.drop('EMA'+str(period), axis=1, inplace=True)
         return df.join(ema.to_frame('EMA'+str(period)))
 
-    def RSI(self, df, column="Close", period=14):
+    def RSI(self, df, column="close", period=14):
         delta = df[column].diff()
         up, down = delta.copy(), delta.copy()
 

@@ -1,7 +1,7 @@
 from OfflineTestTrader import OfflineTestTrader
-from SupportLinesStrategy import SupportLinesStrategy
+from RSICumMaxStrategy import RSICumMaxStrategy
 
-strategy = SupportLinesStrategy(k1=1, k2=1, k3=1, size=288)
+strategy = RSICumMaxStrategy(k1=33, k2=0.995)
 trader = OfflineTestTrader("./data/2019-1-1-BTCUSDT-5m.csv", strategy, 1000, 100)
 
 trader.run()
