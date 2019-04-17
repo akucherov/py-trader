@@ -72,8 +72,8 @@ class BaseStrategy:
         up[up < 0] = 0
         down[down > 0] = 0
 
-        rUp = up.ewm(com=period - 1,  adjust=False).mean()
-        rDown = down.ewm(com=period - 1, adjust=False).mean().abs()
+        rUp = up.ewm(com=period - 1, min_periods=period, adjust=True).mean()
+        rDown = down.ewm(com=period - 1, min_periods=period, adjust=True).mean().abs()
 
         rsi = 100 - 100 / (1 + rUp / rDown)    
 
