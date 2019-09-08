@@ -29,7 +29,7 @@ class BaseStrategy:
             self.df = self.df.append(self.cr, sort=False)
             self.cr = rec
             s, _ = self.df.shape
-            if not self.buyTS is None and s > self.size:
+            if not self.buyTS is None and s > self.size and self.buyTS < self.df.iloc[-self.size].name:
                 self.df = self.df[self.buyTS:]
             elif s > self.size: 
                 self.df = self.df.iloc[-self.size:]
@@ -53,7 +53,7 @@ class BaseStrategy:
         self.buyTS = None
 
     def getKey(self, ts):
-        return pd.Timestamp(datetime.fromtimestamp(int(ts)/1000))
+        return ts if isinstance(ts, pd.Timestamp) else pd.Timestamp(datetime.fromtimestamp(int(ts)/1000))
         
     def SMA(self, df, column="close", period=20):
         sma = df[column].rolling(window=period, min_periods=period - 1).mean()
